@@ -1,3 +1,9 @@
+> **NOTE (post-audit):** Sections describing parameter values, calibrations, or
+> numbers may be historical. The canonical, current artifacts are:
+> README.md, docs/BKPYV_MODEL_CARD.md, docs/ISEF_PROJECT_OVERVIEW.md, and
+> the code itself (src/vcm/simulators/ode_system.py is the source of truth
+> for the ODE model and its parameters). Time unit: days for the ODE engine.
+
 # BKPyV Clinical Guide for Judges and Mentors
 
 ## Executive Summary
@@ -72,25 +78,22 @@ Our model is built on **published clinical research**, not assumptions:
 
 ### Key Research Findings Incorporated:
 
-1. **Drug Effects** (Hirsch et al., Am J Transplant 2016):
-   - **Tacrolimus** (common transplant drug): **ACTIVATES** viral replication
-   - **Sirolimus** (alternative drug): **SUPPRESSES** viral replication
-   - Both drugs work through the same protein (FKBP-12) but have opposite effects
+1. **Drug effects** (Hirsch et al., Am J Transplant 2016;16(3):821-832, *in vitro* in primary renal cells):
+   - **Tacrolimus promotes viral *production***: it weakens immune control of infected cells, so more virions accumulate (it does not directly promote genome copying). Wording follows expert review of this project (S. Thompson lab, UAB, Sep 2026).
+   - **Sirolimus may prevent viral *production*** by reducing S-phase entry/T-antigen expression (mTOR/S6K pathway; IC90 ≈ 4 ng/mL).
+   - Clinical standpoint: tacrolimus-based regimens are associated with higher BKPyV risk than some comparators; whether mTOR-inhibitor regimens *protect* at the patient level remains debated in meta-analyses - the model claims only direction and mechanism framing.
+   - Terminology note (per expert review): within this project, *replication* means intracellular genome copying; system-level changes in virions/viremia are *production*.
 
-2. **Cell Cycle Dependence** (Weissbach et al., J Virol 2024):
-   - BKPyV replicates best during **S-phase** of cell division
-   - Requires host DNA replication machinery
-   - This explains why immunosuppressive drugs affect viral replication
+2. **Cell cycle dependence** (Needham et al., PLoS Pathogens 2024; Weissbach et al., J Virol 2024):
+   - Host S phase *precedes* large T-antigen accumulation (the "S-phase gate" in the model)
+   - BKPyV replication requires host DNA-replication machinery
+   - Infected cells show a mitochondrial-stress signature
 
-3. **Clinical Risk Factors** (Multiple cohort studies):
-   - **Age >50 years**: 1.8-2x increased risk
-   - **Male sex**: 2.3x increased risk  
-   - **Prior transplant**: 3x increased risk
-   - **HLA mismatch**: 1.3x increased risk
+3. **Clinical risk factors** (Demey et al., J Clin Virol 2018 systematic review; Yamauchi et al., Renal Failure 2025):
+   - Older age, male sex, prior transplant, tacrolimus-based regimen (directionally consistent factors; specific odds-ratio magnitudes are study-dependent and no particular OR set is hard-coded as ground truth)
 
-4. **Drug Timing Effects**:
-   - Sirolimus only works in **early infection** (first 24 hours)
-   - After that, the virus becomes drug-resistant
+4. **Drug timing** (Hirsch 2016, in vitro):
+   - Sirolimus inhibition was strongest when applied before productive replication; the ODE implements this as a T-antigen-level--gated window rather than a hard 24-hour clock.
    - This timing is critical for treatment decisions
 
 ### Data Sources:
@@ -109,15 +112,14 @@ Our model is built on **published clinical research**, not assumptions:
 Our model shows **why** different drugs have different effects:
 
 **Tacrolimus**:
-- Binds to FKBP-12 protein
-- Creates environment that **activates** viral replication
-- Clinical data: Patients on tacrolimus have **2.0-2.3x higher risk** of BKPyVAN
+- Potent calcineurin inhibitor that weakens T-cell immune targeting of infected cells
+- In the model, this weaker immune pressure **promotes viral production** relative to baseline
+- Literature odds ratio used in the synthetic cohort model: OR ≈ 2.3 (Fang 2022, PMC9428263)
 
 **Sirolimus**:  
-- Also binds FKBP-12 but blocks a different pathway (mTOR)
-- **Inhibits** viral replication (90% inhibition at 4 ng/mL)
-- Most effective in early infection phase
-- May protect against BKPyVAN
+- mTOR inhibitor; in the model it **may prevent production** via the S-phase entry gate (host-cell permissiveness)
+- In vitro IC90 ≈ 4 ng/mL reported by Hirsch 2016 (AJT-16-821); the model treats this as a mechanistic prior, not a clinical dosing claim
+- Drug timing matters qualitatively (early viral-gene-expression window); no hard cutoff or drug-resistance claim
 
 **Why This Matters**:
 - Helps doctors choose the right immunosuppressive regimen
@@ -330,20 +332,20 @@ mapper = ClinicalViralLoadMapper()
 
 ### 1. Why does tacrolimus increase BKPyV risk?
 
-**Answer**: Tacrolimus binds to FKBP-12 protein and creates a cellular environment that **activates** viral replication. Clinical data shows patients on tacrolimus have **2.0-2.3x higher risk** of BKPyVAN compared to patients on belatacept.
+**Answer**: Tacrolimus is a calcineurin inhibitor that weakens T-cell immune targeting of infected cells. In the model this weaker immune pressure **promotes viral production** relative to baseline. The synthetic-cohort risk model uses a literature odds ratio of OR ≈ 2.3 for tacrolimus use (Fang 2022, PMC9428263).
 
 ### 2. Can sirolimus protect against BKPyV?
 
-**Answer**: Yes, sirolimus **inhibits** BKPyV replication by blocking the mTOR pathway, but only during **early infection** (first 24 hours). After this, the virus becomes drug-resistant.
+**Answer**: In the model, sirolimus **may prevent production** via the S-phase entry gate on host-cell permissiveness (mTOR-dependent cell-cycle state). Its effect is time-windowed around early viral gene expression — a graded mechanistic window, not a hard cutoff, and the model does not claim drug resistance emerges.
 
 ### 3. What factors increase BKPyV risk?
 
-**Answer**: Our model incorporates research-validated risk factors:
-- Age >50 years (1.8-2x risk)
-- Male sex (2.3x risk)
-- Prior kidney transplant (3x risk)
-- HLA mismatch (1.3x risk for 4-6 mismatch)
-- Tacrolimus use (2.0-2.3x risk)
+**Answer**: The synthetic-cohort risk model uses literature-sourced odds ratios (Fang 2022, PMC9428263):
+- Tacrolimus use (OR ≈ 2.3)
+- Prior kidney transplant (OR ≈ 2.1)
+- Male sex (OR ≈ 1.6)
+- Diabetes (OR ≈ 1.3)
+- Higher simulated peak viral load (derived from VCM features; higher peak → higher risk)
 
 ### 4. How does the model translate cell simulation to clinical outcomes?
 

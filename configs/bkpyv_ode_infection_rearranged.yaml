@@ -1,0 +1,38 @@
+# BKPyV ODE Infection - rearranged NCCR variant
+# Hypothesis scenario (expert-driven): rearranged NCCR --> earlier/stronger TAg
+# bias with reduced capsid expression. NOT a measured patient genotype.
+experiment_id: bkpyv_ode_infection_rearranged
+plugin: transplant.bk_polyomavirus
+simulator: bkpyv_ode
+simulation_length: 100.0
+timestep: 1.0
+time_unit: days
+output_path: outputs/bkpyv/ode_infection_rearranged/
+save_interval: 1
+seed: 42
+
+environment:
+  temperature: 37.0
+  ph: 7.4
+  oxygen_level: 21.0
+  glucose_concentration: 5.0
+
+perturbations:
+  - id: bkpyv_infection
+    name: BKPyV infection
+    perturbation_type: viral_infection
+    target_id: null
+    magnitude: 1.0
+    timing: 10.0
+    duration: null
+
+simulator_parameters:
+  ode_solver: LSODA
+  rtol: 1.0e-6
+  atol: 1.0e-8
+  max_step: 1.0
+  nccr_variant: rearranged
+
+metadata:
+  description: "ODE BKPyV infection with rearranged NCCR scenario"
+  grounding: "Archetype = transmitted/persistent form; rearranged = clinically important form with early-gene bias (Gosert 2008, J Exp Med; Broekema & Imperiale 2012, Virology). Multipliers are scenario hypotheses, not fitted values."

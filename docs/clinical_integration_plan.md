@@ -1,3 +1,9 @@
+> **NOTE (post-audit):** Sections describing parameter values, calibrations, or
+> numbers may be historical. The canonical, current artifacts are:
+> README.md, docs/BKPYV_MODEL_CARD.md, docs/ISEF_PROJECT_OVERVIEW.md, and
+> the code itself (src/vcm/simulators/ode_system.py is the source of truth
+> for the ODE model and its parameters). Time unit: days for the ODE engine.
+
 # Comprehensive Clinical Integration & Frontend UI Development Plan
 
 ## Overview

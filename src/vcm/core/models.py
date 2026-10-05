@@ -2,9 +2,9 @@
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class PerturbationType(str, Enum):
@@ -85,13 +85,19 @@ class Perturbation(BaseModel):
     """Represents a perturbation to be applied to the cell."""
 
     id: str
-    name: str
+    name: Optional[str] = Field(default=None, description="Human-readable name (defaults to id)")
     perturbation_type: PerturbationType
     target_id: Optional[str] = Field(default=None, description="Target gene/protein/metabolite ID")
     magnitude: float = Field(default=1.0, description="Magnitude of perturbation")
     duration: Optional[float] = Field(default=None, description="Duration in time units")
     timing: Optional[float] = Field(default=0.0, description="When to apply perturbation")
     parameters: Dict[str, Any] = Field(default_factory=dict, description="Additional parameters")
+
+    @model_validator(mode="after")
+    def _default_name(self) -> "Perturbation":
+        if self.name is None or self.name == "":
+            self.name = self.id
+        return self
 
 
 class CellState(BaseModel):
@@ -243,16 +249,40 @@ class SimulationResult(BaseModel):
 
 
 class ExperimentConfig(BaseModel):
-    """Configuration for an experiment."""
+    """Configuration for an experiment.
+
+    Time unit discipline: ``time_unit`` declares the unit of
+    ``simulation_length``, ``timestep``, and perturbation ``timing``/``duration``.
+    The canonical unit for BKPyV experiments is "days" (the ODE simulator's
+    rate constants are per day). The legacy discrete ``bkpyv_specific``
+    simulator historically interpreted timesteps as hours; new work should use
+    the ODE simulator with days.
+    """
 
     experiment_id: str
     plugin: str
     simulator: str = Field(default="mechanistic", description="Simulator type to use")
-    simulation_length: float = Field(default=100.0, description="Total simulation time")
-    timestep: float = Field(default=1.0, description="Time step size")
+    simulation_length: float = Field(default=100.0, description="Total simulation time (in time_unit)")
+    timestep: float = Field(default=1.0, description="Time step size (in time_unit)")
+    time_unit: str = Field(default="days", description="Unit of all times in this config: 'days', 'hours', or 'weeks'")
+    simulator_parameters: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Parameters passed to the simulator constructor (e.g., rate constants)",
+    )
     perturbations: List[Perturbation] = Field(default_factory=list)
     environment: Environment = Field(default_factory=Environment)
     output_path: str = Field(default="outputs/", description="Where to save results")
     save_interval: int = Field(default=1, description="Save every N steps")
     seed: Optional[int] = Field(default=None, description="Random seed for reproducibility")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata (not passed to the simulator)")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _merge_legacy_simulator_params(cls, data: Any) -> Any:
+        # Older configs used the key ``simulator_params``; accept it as an
+        # alias rather than silently dropping parameters.
+        if isinstance(data, dict) and isinstance(data.get("simulator_params"), dict):
+            legacy = data.pop("simulator_params")
+            merged = {**legacy, **(data.get("simulator_parameters") or {})}
+            data["simulator_parameters"] = merged
+        return data

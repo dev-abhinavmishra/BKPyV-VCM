@@ -1,0 +1,114 @@
+# BKPyV Advanced Clinical Scenario: Gradual Tacrolimus Taper vs Abrupt Switch
+# 
+# This scenario demonstrates the clinical decision support capabilities of the VCM platform
+# by comparing two different management strategies for patients with BKPyV viremia.
+#
+# Clinical Context:
+# - Patients with BKPyV viremia often require immunosuppression modification
+# - Two common approaches: gradual taper vs abrupt switch
+# - Gradual taper: Slowly reduce tacrolimus over time while monitoring viral load
+# - Abrupt switch: Immediately switch from tacrolimus to sirolimus
+#
+# Research Grounding:
+# - Hirsch HH et al. AJT 2016: Tacrolimus promotes BKPyV replication
+# - Schold et al. Am J Transplant 2018: Sirolimus protects against BKPyV
+# - Clinical practice: Both approaches used, but comparative effectiveness unclear
+#
+# ISEF Impact: Shows VCM can simulate clinical decision-making scenarios
+
+experiment_id: bkpyv_drug_taper_comparison
+plugin: transplant.bk_polyomavirus
+simulator: bkpyv_specific
+simulation_length: 52.0
+timestep: 1.0
+# Legacy discrete simulator: one timestep is one hour (52 steps here are 52 hours,
+# NOT 52 weeks, despite any historical week-based comments in this file).
+time_unit: hours
+output_path: outputs/bkpyv/drug_taper_comparison/
+save_interval: 1
+seed: 42
+
+# Environment settings (standard transplant conditions)
+environment:
+  temperature: 37.0
+  ph: 7.4
+  oxygen_level: 21.0
+  glucose_concentration: 5.0
+  nutrient_availability: {}
+  stress_factors: {}
+
+# No perturbations - simulation uses drug effect parameters
+perturbations: []
+
+# Simulator parameters for drug taper simulation
+# This config focuses on time-dependent drug effects
+simulator_parameters:
+  # Drug effect parameters (HIGH confidence from AJT-16-821.pdf)
+  tacrolimus_enhancement_factor: 2.0  # literature OR ~2.3 (Fang 2022, PMC9428263)
+  sirolimus_inhibition_factor: 0.5  # in-vitro IC90 ~4 ng/mL (Hirsch 2016)
+  everolimus_inhibition_factor: 0.5  # Analogous to sirolimus
+  
+  # Time-dependent drug effect parameters (MEDIUM confidence)
+  # These parameters model the clinical scenario where drug levels change over time
+  drug_effectiveness_window: 24.0  # Early phase window (weeks)
+  late_phase_drug_resistance: 0.3  # reduced late-phase effectiveness (graded window)
+  drug_switch_delay: 2.0  # Time for new drug to reach steady state (weeks)
+  
+  # Viral replication parameters (MEDIUM confidence)
+  t_antigen_replication_threshold: 0.5  # T antigen requirement
+  dna_replication_coupling: 0.8  # Host-viral coupling
+  cell_cycle_s_phase_bonus: 2.0  # S-phase optimal
+  viral_replication_rate: 0.1  # Base replication rate
+  viral_clearance_rate: 0.1  # Base clearance rate
+  
+  # Host response parameters (MEDIUM confidence)
+  innate_immune_suppression_factor: 0.5  # Immune evasion
+  dna_damage_response_enhancement: 1.3  # DDR permissive effect
+  
+  # Clinical risk factors (HIGH confidence)
+  age_risk_multiplier: 1.9  # Age >50 years
+  male_sex_risk_multiplier: 2.3  # Male sex
+  prior_transplant_risk_multiplier: 3.0  # Prior transplant
+  hla_mismatch_risk_multiplier: 1.3  # HLA 4-6 mismatch
+  
+  # Scenario-specific parameters (EXPLORATORY - marked as such)
+  # These parameters model the specific drug tapering scenario
+  taper_start_week: 8.0  # When tapering begins (based on clinical detection)
+  taper_duration_weeks: 12.0  # How long taper takes
+  tacrolimus_start_level: 10.0  # Starting trough level (ng/mL)
+  tacrolimus_end_level: 2.0  # Target trough level after taper (ng/mL)
+  sirolimus_switch_week: 8.0  # Week when abrupt switch occurs
+  sirolimus_target_level: 8.0  # Target sirolimus level (ng/mL)
+  
+  # Immune recovery parameters (EXPLORATORY)
+  immune_recovery_rate: 0.05  # How quickly immune system recovers after drug reduction
+  maximum_immune_recovery: 0.8  # Maximum possible recovery
+
+# Scenario metadata
+metadata:
+  description: "Advanced clinical scenario: gradual tacrolimus taper vs abrupt switch to sirolimus for BKPyV viremia management"
+  research_grounding: "AJT-16-821.pdf (drug mechanisms), Schold et al. Am J Transplant 2018 (sirolimus protection), clinical practice patterns"
+  clinical_significance: "Demonstrates VCM capability to simulate clinical decision-making scenarios and compare management strategies"
+  exploratory_note: "Drug tapering parameters are marked as exploratory. Clinical validation would be required for implementation decisions."
+  
+  scenario_explanation: |
+    This scenario compares two common clinical management approaches for BKPyV viremia:
+    
+    1. **Gradual Tacrolimus Taper**: Slowly reduce tacrolimus over 12 weeks starting at week 8
+       - Starting level: 10 ng/mL (clinical typical)
+       - Target level: 2 ng/mL (very low)
+       - Rationale: Gradual reduction allows monitoring of immune recovery while maintaining some graft protection
+    
+    2. **Abrupt Sirolimus Switch**: Immediately switch from tacrolimus to sirolimus at week 8
+       - Immediate transition: tacrolimus → sirolimus
+       - Target level: 8 ng/mL (clinical typical)
+       - Rationale: Rapid switch to protective agent while maintaining immunosuppression
+    
+    The VCM simulates viral load trajectories under both approaches to inform clinical decision-making.
+  
+  expected_outcomes: |
+    Based on literature-grounded parameters:
+    - Gradual taper may show gradual viral load increase as drug pressure decreases
+    - Abrupt switch may show rapid viral load reduction due to sirolimus protective effect
+    - Trade-offs: Gradual taper maintains better graft protection vs abrupt switch provides faster viral control
+    - Clinical relevance: Simulation can inform personalized medicine approaches

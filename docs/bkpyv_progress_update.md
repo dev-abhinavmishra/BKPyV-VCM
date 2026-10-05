@@ -1,3 +1,9 @@
+> **NOTE (post-audit):** Sections describing parameter values, calibrations, or
+> numbers may be historical. The canonical, current artifacts are:
+> README.md, docs/BKPYV_MODEL_CARD.md, docs/ISEF_PROJECT_OVERVIEW.md, and
+> the code itself (src/vcm/simulators/ode_system.py is the source of truth
+> for the ODE model and its parameters). Time unit: days for the ODE engine.
+
 # BKPyV Research-Grounded Implementation - Progress Update
 
 ## Overview
@@ -68,13 +74,13 @@ This document summarizes the refinements made to the BKPyV plugin and simulator 
 **File**: `src/vcm/simulators/bkpyv_simulator.py`
 
 **Implemented mechanistic drug distinctions**:
-- Tacrolimus: Activates replication via FKBP-12 pathway (1.5x enhancement, persists all phases)
-- Sirolimus: Inhibits replication via mTOR pathway (50% at IC90=4ng/mL, only effective in early phase 0-24h)
-- Phase-dependent drug effectiveness: Sirolimus reduced to 30% effectiveness in late phase
+- Tacrolimus: weaker T-cell immune targeting promotes viral production (factor 1.5 on production/permissiveness, persists all phases)
+- Sirolimus: reduces production via the mTOR S-phase gate (in-vitro IC90 ~4 ng/mL, Hirsch 2016); graded early-window effectiveness
+- Phase-dependent drug effectiveness: reduced sirolimus effect in late phase (graded, not resistance)
 
 **Implemented early vs late replication phase logic**:
-- Early phase (0-24h): Drug-sensitive, DDR enhances replication
-- Late phase (>24h): Drug-resistant, DDR reduced effect, mitochondrial stress emerges
+- Early phase: higher drug sensitivity (early viral-gene-expression window), DDR increases permissiveness
+- Late phase: reduced drug effect (graded window, not resistance), mitochondrial stress emerges
 
 **Implemented mitochondrial stress emergence**:
 - Late phase only (time_since_infection > 24h)
@@ -87,7 +93,7 @@ This document summarizes the refinements made to the BKPyV plugin and simulator 
 - Provides immune evasion mechanism
 
 **Implemented DDR dual role**:
-- Early phase: DDR enhances replication (permissive, 1.3x enhancement)
+- Early phase: DDR increases host-cell permissiveness (1.3x factor)
 - Late phase: DDR has reduced effect (50% of early enhancement due to apoptosis potential)
 
 ### E. Better Configuration Files
@@ -111,7 +117,7 @@ This document summarizes the refinements made to the BKPyV plugin and simulator 
 **File**: `scripts/validate_bkpyv_model.py`
 
 **Created qualitative validation tests**:
-1. **Tacrolimus vs Control**: Verifies tacrolimus enhances replication vs baseline
+1. **Tacrolimus vs Control**: Verifies tacrolimus increases viral production vs baseline (weaker immune targeting)
 2. **Sirolimus vs Tacrolimus (Early)**: Verifies sirolimus inhibits more than tacrolimus enhances
 3. **Cell Cycle Permissiveness**: Verifies S-phase bonus, DNA coupling, DDR enhancement
 4. **Mitochondrial Stress (Late)**: Verifies late phase has stronger mitochondrial stress

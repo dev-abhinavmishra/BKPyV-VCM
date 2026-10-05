@@ -18,7 +18,7 @@ Threshold Levels:
 """
 
 import math
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 import json
@@ -379,7 +379,7 @@ class ClinicalThresholdsManager:
         viral_loads: List[float],
         timepoints: List[float],
         min_measurements: int = 3
-    ) -> Dict[str, any]:
+    ) -> Dict[str, Any]:
         """Analyze viral load trend over time.
         
         Args:
@@ -419,17 +419,17 @@ class ClinicalThresholdsManager:
         else:
             trend = 'stable'
         
-        # Calculate rate of change
-        if len(viral_loads) >= 2:
+        # Calculate rate of change (guard against degenerate time axis)
+        if len(viral_loads) >= 2 and timepoints[-1] != timepoints[0]:
             rate_of_change = (viral_loads[-1] - viral_loads[0]) / (timepoints[-1] - timepoints[0])
         else:
             rate_of_change = None
         
-        # Calculate doubling time if rising
+        # Calculate doubling time if rising. The slope was fitted to
+        # log10-transformed loads, so doubling time uses log10(2), not ln(2).
         doubling_time = None
         if trend == 'rising' and slope > 0:
-            # Doubling time = log(2) / slope (in time units)
-            doubling_time = math.log(2) / slope if slope > 0 else None
+            doubling_time = math.log10(2) / slope
         
         # Generate recommendation
         if trend == 'rising' and slope > 0.05:  # Steep rise
@@ -509,7 +509,7 @@ class ClinicalThresholdsManager:
             Next monitoring date description
         """
         frequency_days = {
-            'Twice weekly': 3-4,
+            'Twice weekly': 3.5,
             'Weekly': 7,
             'Biweekly': 14,
             'Monthly': 30,
@@ -594,7 +594,7 @@ def get_default_thresholds_manager() -> ClinicalThresholdsManager:
 def interpret_bk_viral_load(
     viral_load_copies_ml: float,
     trend: Optional[str] = None,
-) -> Dict[str, any]:
+) -> Dict[str, Any]:
     """Convenience function to interpret BK viral load.
     
     Args:

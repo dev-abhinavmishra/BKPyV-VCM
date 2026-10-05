@@ -1,3 +1,9 @@
+> **NOTE (post-audit):** Sections describing parameter values, calibrations, or
+> numbers may be historical. The canonical, current artifacts are:
+> README.md, docs/BKPYV_MODEL_CARD.md, docs/ISEF_PROJECT_OVERVIEW.md, and
+> the code itself (src/vcm/simulators/ode_system.py is the source of truth
+> for the ODE model and its parameters). Time unit: days for the ODE engine.
+
 # BKPyV Virtual Cell Model - Technical Documentation
 
 ## Table of Contents
@@ -16,15 +22,15 @@
 
 ### System Requirements
 
-- **Python**: 3.8 or higher
-- **Operating System**: macOS, Linux, Windows (WSL recommended)
+- **Python**: >=3.10 (pyproject `requires-python`)
+- **Operating System**: macOS, Linux, Windows
 - **Memory**: 4GB RAM minimum, 8GB recommended
-- **Storage**: 500MB for project files
+- **Storage**: 500MB for project files (plus ~2GB if extracting the GSE317012 raw archive)
 
 ### Prerequisites
 
 ```bash
-# Python 3.8+
+# Python >=3.10
 python --version
 
 # pip (Python package manager)
@@ -43,36 +49,27 @@ cd virtual-cell-model
 #### 2. Create Virtual Environment
 
 ```bash
-# Create virtual environment
-python -m venv venv
+# Create the isolated environment (the project's .venv is gitignored)
+python -m venv .venv
 
-# Activate virtual environment
+# Activate it
 # On macOS/Linux:
-source venv/bin/activate
+source .venv/bin/activate
 # On Windows:
-venv\Scripts\activate
+.venv\Scripts\activate
 ```
 
 #### 3. Install Dependencies
 
 ```bash
-# Install core dependencies
-pip install numpy pandas matplotlib plotly pyyaml
-
-# Install ML dependencies (optional, for risk prediction)
-pip install scikit-learn
-
-# Install Streamlit (for web interface)
-pip install streamlit
-
-# Install python-docx (for data extraction)
-pip install python-docx
+# Editable install with the dev + UI extras (pinned in pyproject.toml)
+pip install -e ".[dev,ui]"
 ```
 
 #### 4. Verify Installation
 
 ```bash
-# Test Python imports
+# Test Python imports (inside the activated .venv)
 python -c "import vcm; print('VCM imported successfully')"
 
 # Run validation script
@@ -412,11 +409,13 @@ perturbations:
 These are based on direct experimental measurements or clinical data:
 
 ```yaml
+# legacy discrete-simulator parameters (bkpyv_specific, hours/step) - the ODE
+# engine (bkpyv_ode, days) uses the S-phase gate + graded early-window instead
 simulator_parameters:
-  tacrolimus_enhancement_factor: 2.0    # Clinical OR 2.0-2.3
-  sirolimus_inhibition_factor: 0.5      # IC90 = 4 ng/mL
-  drug_effectiveness_window: 24.0        # Early phase only (hours)
-  late_phase_drug_resistance: 0.3        # Reduced effectiveness in late phase
+  tacrolimus_enhancement_factor: 2.0    # literature OR ≈ 2.3 (Fang 2022, PMC9428263)
+  sirolimus_inhibition_factor: 0.5      # in-vitro IC90 ≈ 4 ng/mL (Hirsch 2016)
+  drug_effectiveness_window: 24.0        # early-phase window (hours)
+  late_phase_drug_resistance: 0.3        # reduced late-phase effectiveness factor
 ```
 
 #### Viral Replication Parameters (MEDIUM Confidence)

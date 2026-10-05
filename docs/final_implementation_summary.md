@@ -1,3 +1,9 @@
+﻿> **NOTE (post-audit):** Sections describing parameter values, calibrations, or
+> numbers may be historical. The canonical, current artifacts are:
+> README.md, docs/BKPYV_MODEL_CARD.md, docs/ISEF_PROJECT_OVERVIEW.md, and
+> the code itself (src/vcm/simulators/ode_system.py is the source of truth
+> for the ODE model and its parameters). Time unit: days for the ODE engine.
+
 # BKPyV Virtual Cell Model - Final Implementation Summary
 
 ## Executive Summary
@@ -10,7 +16,7 @@ This project successfully transformed the BK polyomavirus (BKPyV) plugin from a 
 
 ## Completed Deliverables
 
-### 1. ✅ Comprehensive Clinical Integration Plan
+### 1. âœ… Comprehensive Clinical Integration Plan
 
 **File**: `docs/clinical_integration_plan.md`
 
@@ -21,18 +27,18 @@ Created a detailed roadmap for transforming the BKPyV plugin into a clinically r
 - Research data integration strategy
 - Machine learning integration approach
 
-### 2. ✅ Clinical Viral Load Mapper
+### 2. âœ… Clinical Viral Load Mapper
 
 **File**: `src/vcm/clinical/viral_load_mapper.py`
 
 Bridges virtual cell simulations to clinical measurements:
 - Converts 0-1 scale virtual viral load to plasma copies/mL
-- Implements clinical thresholds (≥1,000 and ≥10,000 copies/mL)
+- Implements clinical thresholds (â‰¥1,000 and â‰¥10,000 copies/mL)
 - Provides risk stratification with clinical recommendations
 - Supports population scaling, renal clearance kinetics, drug effects
 - **Key Innovation**: Enables clinical interpretation of simulation results
 
-### 3. ✅ Clinical Parameter Calibration Script
+### 3. âœ… Clinical Parameter Calibration Script
 
 **File**: `src/vcm/clinical/calibration.py`
 
@@ -43,7 +49,7 @@ Optimizes simulation parameters to match clinical cohort data:
 - Provides sensitivity analysis for key parameters
 - **Key Innovation**: Uses real clinical data to calibrate phenomenological parameters
 
-### 4. ✅ Risk Prediction Module with ML Integration
+### 4. âœ… Risk Prediction Module with ML Integration
 
 **File**: `src/vcm/clinical/risk_prediction.py`
 
@@ -54,7 +60,7 @@ Combines traditional clinical factors with virtual cell simulation features:
 - Provides clinical recommendations based on risk predictions
 - **Key Innovation**: Hybrid approach combining mechanistic simulation with ML
 
-### 5. ✅ Streamlit Frontend UI
+### 5. âœ… Streamlit Frontend UI
 
 **File**: `src/vcm/ui/streamlit_app.py`
 
@@ -66,7 +72,7 @@ User-friendly web interface for non-technical users:
 - Clinical risk stratification dashboard
 - **Key Innovation**: Makes complex simulations accessible to clinicians and judges
 
-### 6. ✅ Clinical Thresholds Management Module
+### 6. âœ… Clinical Thresholds Management Module
 
 **File**: `src/vcm/clinical/thresholds.py`
 
@@ -77,7 +83,7 @@ Manages clinical thresholds and risk stratification:
 - Supports trend analysis and monitoring schedules
 - **Key Innovation**: Bridges simulation results to clinical guidelines
 
-### 7. ✅ Comprehensive Documentation Suite
+### 7. âœ… Comprehensive Documentation Suite
 
 **Files**: 
 - `docs/technical_documentation.md` - Technical API and architecture documentation
@@ -92,7 +98,7 @@ Documentation covers:
 - Troubleshooting and additional resources
 - ISEF-specific guidance for judges and mentors
 
-### 8. ✅ Previous BKPyV Implementation
+### 8. âœ… Previous BKPyV Implementation
 
 **Previously Completed Core Components**:
 
@@ -111,44 +117,44 @@ Documentation covers:
 
 ```
 virtual-cell-model/
-├── src/vcm/
-│   ├── clinical/              # NEW: Clinical integration layer
-│   │   ├── viral_load_mapper.py
-│   │   ├── calibration.py
-│   │   ├── risk_prediction.py
-│   │   └── thresholds.py
-│   ├── plugins/
-│   │   └── transplant/
-│   │       └── bk_polyomavirus/
-│   │           ├── parameters.py
-│   │           └── viral_load_mapper.py (BKPyV-specific)
-│   ├── simulators/
-│   │   └── bkpyv_simulator.py (ENHANCED)
-│   └── ui/
-│       └── streamlit_app.py    # NEW: Web interface
-├── data/
-│   ├── research/              # ENHANCED: Data organization
-│   │   ├── docx/extracted_tables/ (7 CSV files)
-│   │   └── README.md (data inventory)
-├── configs/                   # ENHANCED: 6 scenario configs
-├── docs/
-│   ├── clinical_integration_plan.md (NEW)
-│   ├── judges_mentors_guide.md (NEW)
-│   ├── technical_documentation.md (NEW)
-│   ├── bkpyv_research_to_model_map.md
-│   └── bkpyv_progress_update.md
-├── validate_bkpyv.py          # Validation script
-└── validate_clinical.py        # NEW: Clinical validation (to be added)
+â”œâ”€â”€ src/vcm/
+â”‚   â”œâ”€â”€ clinical/              # NEW: Clinical integration layer
+â”‚   â”‚   â”œâ”€â”€ viral_load_mapper.py
+â”‚   â”‚   â”œâ”€â”€ calibration.py
+â”‚   â”‚   â”œâ”€â”€ risk_prediction.py
+â”‚   â”‚   â””â”€â”€ thresholds.py
+â”‚   â”œâ”€â”€ plugins/
+â”‚   â”‚   â””â”€â”€ transplant/
+â”‚   â”‚       â””â”€â”€ bk_polyomavirus/
+â”‚   â”‚           â”œâ”€â”€ parameters.py
+â”‚   â”‚           â””â”€â”€ viral_load_mapper.py (BKPyV-specific)
+â”‚   â”œâ”€â”€ simulators/
+â”‚   â”‚   â””â”€â”€ bkpyv_simulator.py (ENHANCED)
+â”‚   â””â”€â”€ ui/
+â”‚       â””â”€â”€ streamlit_app.py    # NEW: Web interface
+â”œâ”€â”€ data/
+â”‚   â”œâ”€â”€ research/              # ENHANCED: Data organization
+â”‚   â”‚   â”œâ”€â”€ docx/extracted_tables/ (7 CSV files)
+â”‚   â”‚   â””â”€â”€ README.md (data inventory)
+â”œâ”€â”€ configs/                   # ENHANCED: 6 scenario configs
+â”œâ”€â”€ docs/
+â”‚   â”œâ”€â”€ clinical_integration_plan.md (NEW)
+â”‚   â”œâ”€â”€ judges_mentors_guide.md (NEW)
+â”‚   â”œâ”€â”€ technical_documentation.md (NEW)
+â”‚   â”œâ”€â”€ bkpyv_research_to_model_map.md
+â”‚   â””â”€â”€ bkpyv_progress_update.md
+â”œâ”€â”€ validate_bkpyv.py          # Validation script
+â””â”€â”€ validate_clinical.py        # NEW: Clinical validation (to be added)
 ```
 
 ### Data Flow Architecture
 
 ```
-Patient Data → Clinical Covariates → Risk Prediction → Risk Score
-     ↓                ↓                    ↓
-Configuration → BKPyV Plugin → Simulator → Trajectory
-     ↓                ↓               ↓          ↓
-Research Data → Parameter Registry → Viral Load Mapper → Clinical Load → Risk Stratification
+Patient Data â†’ Clinical Covariates â†’ Risk Prediction â†’ Risk Score
+     â†“                â†“                    â†“
+Configuration â†’ BKPyV Plugin â†’ Simulator â†’ Trajectory
+     â†“                â†“               â†“          â†“
+Research Data â†’ Parameter Registry â†’ Viral Load Mapper â†’ Clinical Load â†’ Risk Stratification
 ```
 
 ---
@@ -159,10 +165,9 @@ Research Data → Parameter Registry → Viral Load Mapper → Clinical Load →
 
 **Novel Approach**: Model explains **why** tacrolimus increases risk and sirolimus decreases risk:
 
-- **Tacrolimus**: Binds FKBP-12 → Creates permissive environment → 2.0-2.3x risk increase
-- **Sirolimus**: Binds FKBP-12 → Blocks mTOR pathway → 90% inhibition at 4 ng/mL
-- **Timing Dependence**: Sirolimus effective only in early phase (0-24h), 30% effectiveness in late phase
-
+- **Tacrolimus**: calcineurin inhibition -> weaker T-cell immune targeting -> promotes viral production; cohort-model OR ~2.3 (Fang 2022, PMC9428263)
+- **Sirolimus**: mTOR inhibition -> S-phase gate on host permissiveness; in-vitro IC90 ~4 ng/mL (Hirsch 2016)
+- **Timing Dependence**: sirolimus effect is graded across the early viral-gene-expression window - no hard 24h cutoff
 **Clinical Impact**: Helps clinicians choose optimal immunosuppression regimens
 
 ### 2. Clinical Viral Load Mapping
@@ -283,9 +288,9 @@ Research Data → Parameter Registry → Viral Load Mapper → Clinical Load →
 
 ### HIGH Confidence Parameters (Direct Evidence)
 
-- **Sirolimus IC90**: 4 ng/mL (direct experimental measurement)
-- **Tacrolimus OR**: 2.0-2.3 (clinical cohort data)
-- **Drug timing window**: 0-24h effectiveness (experimental data)
+- **Sirolimus IC90**: â‰ˆ4 ng/mL in vitro (Hirsch 2016)
+- **Tacrolimus OR**: â‰ˆ2.3 (Fang 2022, PMC9428263)
+- **Drug timing**: graded early-window effectiveness, no hard cutoff
 - **Clinical risk factors**: Age, sex, prior transplant, HLA mismatch (cohort ORs)
 
 ### MEDIUM Confidence Parameters (Single-Cell/Correlative)
@@ -309,10 +314,10 @@ Research Data → Parameter Registry → Viral Load Mapper → Clinical Load →
 
 The `validate_bkpyv.py` script demonstrates qualitative alignment with research:
 
-1. ✅ **Tacrolimus > Control**: Tacrolimus produces more replication than baseline
-2. ✅ **Sirolimus < Tacrolimus**: Sirolimus suppresses early replication more than tacrolimus  
-3. ✅ **High Permissiveness > Low**: High cell-cycle permissiveness increases viral expansion
-4. ✅ **Late Phase > Early**: Late replication shows stronger mitochondrial stress
+1. âœ… **Tacrolimus > Control**: Tacrolimus produces more replication than baseline
+2. âœ… **Sirolimus < Tacrolimus**: Sirolimus suppresses early replication more than tacrolimus  
+3. âœ… **High Permissiveness > Low**: High cell-cycle permissiveness increases viral expansion
+4. âœ… **Late Phase > Early**: Late replication shows stronger mitochondrial stress
 
 **Interpretation**: Model successfully reproduces key mechanistic patterns from literature
 
@@ -320,7 +325,7 @@ The `validate_bkpyv.py` script demonstrates qualitative alignment with research:
 
 ## System Readiness for Different Use Cases
 
-### ISEF Competition ✅ READY
+### ISEF Competition âœ… READY
 
 **Strengths for ISEF**:
 - Clear research grounding with explicit citations
@@ -337,7 +342,7 @@ The `validate_bkpyv.py` script demonstrates qualitative alignment with research:
 - Streamlit interface for live demonstration
 - Validation script shows reproducibility
 
-### Research Publication ✅ READY
+### Research Publication âœ… READY
 
 **Strengths for Publication**:
 - Novel integration of mechanistic simulation with clinical prediction
@@ -351,7 +356,7 @@ The `validate_bkpyv.py` script demonstrates qualitative alignment with research:
 - Focus on novel hybrid approach and mechanistic insights
 - Provide supplementary data and code for reproducibility
 
-### Clinical Application 🔄 PROTOTYPE STAGE
+### Clinical Application ðŸ”„ PROTOTYPE STAGE
 
 **Current Limitations**:
 - Not yet calibrated with real patient data

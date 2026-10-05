@@ -6,6 +6,10 @@ Performs one-at-a-time (OAT) sensitivity analysis on all model parameters
 to assess how parameter uncertainty affects model outputs (peak viral load).
 """
 
+import matplotlib
+
+matplotlib.use("Agg")  # headless backend: tkinter is unavailable/crashy in some environments
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -15,9 +19,6 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from vcm.plugins.transplant.bk_polyomavirus.bk_polyomavirus import BKPolyomavirusPlugin
-from vcm.simulators.bkpyv_simulator import BKPyVSimulator
-from vcm.core.models import CellState, Environment
 from vcm.clinical.viral_load_mapper import ViralLoadMapper
 
 def main():
@@ -27,12 +28,16 @@ def main():
     print("=" * 80)
     print()
     
-    # Initialize model components
-    plugin = BKPolyomavirusPlugin()
-    simulator = BKPyVSimulator()
+    # The mapper runs the ODE simulator; simulator_config overrides are passed
+    # through on every call so perturbations actually reach the model
+    # (the previous version constructed a perturbed simulator that was never
+    # used, producing a flat tornado chart).
     mapper = ViralLoadMapper()
     
-    # Get default parameters
+    # Parameters wired into the ODE right-hand side. Unwired placeholders
+    # (ddr_enhancement, mitochondrial_importance, protein_degradation_inhibition)
+    # are excluded: they are registered but not yet dynamic, so their
+    # sensitivity is identically zero by construction.
     default_params = {
         'tacrolimus_enhancement_factor': 1.5,
         'mtor_inhibition_factor': 0.5,
@@ -40,16 +45,18 @@ def main():
         'cell_cycle_s_phase_bonus': 2.0,
         'dna_replication_coupling': 0.8,
         'innate_immune_suppression_factor': 0.5,
-        'dna_damage_response_enhancement': 1.3,
         'translation_enhancement_factor': 2.0,
-        'mitochondrial_function_importance': 0.8,
-        'protein_degradation_inhibition': 0.3,
-        'early_replication_window_end': 24.0
     }
+    unwired = ['dna_damage_response_enhancement',
+               'mitochondrial_function_importance',
+               'protein_degradation_inhibition']
     
     print("Parameters for sensitivity analysis:")
     for param, value in default_params.items():
         print(f"  {param}: {value}")
+    print("Skipped (registered but not wired into the ODE dynamics):")
+    for param in unwired:
+        print(f"  {param}: excluded from sweep")
     print()
     
     # Define perturbation levels: ±20%, ±40%
@@ -94,10 +101,9 @@ def main():
                 })
                 continue
             
-            # Update simulator config
+            # Perturbed parameter value is passed THROUGH to the ODE simulator
             config = {param_name: perturbed_value}
-            temp_simulator = BKPyVSimulator(config)
-            
+
             try:
                 # Run simulations for each scenario
                 scenario_peaks = {}
@@ -109,8 +115,10 @@ def main():
                         mapper_scenario = 'sirolimus'
                     else:
                         mapper_scenario = 'infection'
-                    
-                    df = mapper.simulate_clinical_trajectory(mapper_scenario, weeks=52)
+
+                    df = mapper.simulate_clinical_trajectory(
+                        mapper_scenario, weeks=52, simulator_config=config
+                    )
                     scenario_peaks[scenario] = df['copies_per_ml'].max()
                 
                 param_results.append({
@@ -177,16 +185,8 @@ def main():
     
     # Create tornado plot
     fig, ax = plt.subplots(figsize=(12, 8))
-    
-    # Plot tacrolimus scenario
-    tac_data = sens_df[sens_df['scenario'] == 'tacrolimus']
-    y_pos_tac = np.arange(len(tac_data))
-    
-    # Plot sirolimus scenario  
-    sir_data = sens_df[sens_df['scenario'] == 'sirolimus']
-    y_pos_sir = np.arange(len(sir_data))
-    
-    # Create horizontal bar chart
+
+    # Create horizontal bar chart (tacrolimus vs sirolimus per parameter)
     parameters = sens_df['parameter'].unique()
     y_pos = np.arange(len(parameters))
     
@@ -217,12 +217,12 @@ def main():
     print("\n" + "=" * 80)
     print("SENSITIVITY ANALYSIS SUMMARY")
     print("=" * 80)
-    print(f"\nTop 5 most sensitive parameters (tacrolimus scenario):")
+    print("\nTop 5 most sensitive parameters (tacrolimus scenario):")
     top_tac = sens_df[sens_df['scenario'] == 'tacrolimus'].head(5)
     for _, row in top_tac.iterrows():
         print(f"  {row['parameter']}: {row['max_pct_change']:.2f}% ({row['direction']})")
     
-    print(f"\nTop 5 most sensitive parameters (sirolimus scenario):")
+    print("\nTop 5 most sensitive parameters (sirolimus scenario):")
     top_sir = sens_df[sens_df['scenario'] == 'sirolimus'].head(5)
     for _, row in top_sir.iterrows():
         print(f"  {row['parameter']}: {row['max_pct_change']:.2f}% ({row['direction']})")

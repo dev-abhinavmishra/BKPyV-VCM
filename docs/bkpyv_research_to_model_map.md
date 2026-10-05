@@ -1,17 +1,32 @@
+> **NOTE (post-audit):** Sections describing parameter values, calibrations, or
+> numbers may be historical. The canonical, current artifacts are:
+> README.md, docs/BKPYV_MODEL_CARD.md, docs/ISEF_PROJECT_OVERVIEW.md, and
+> the code itself (src/vcm/simulators/ode_system.py is the source of truth
+> for the ODE model and its parameters). Time unit: days for the ODE engine.
+
 # BKPyV Research-to-Model Mapping
 
 This document maps biological mechanisms identified from research papers to their implementation in the BKPyV virtual cell model, including parameter values, evidence sources, and confidence levels.
+
+> **Model-representation scope:** the *Model Representation* and *Parameters*
+> columns below describe the **legacy discrete simulator** (`bkpyv_specific`,
+> hours/step). The canonical ODE engine (`bkpyv_ode`, days) reframes the same
+> evidence differently: tacrolimus acts through **weaker immune targeting**
+> (not direct replication enhancement), sirolimus through an **mTOR S-phase
+> gate** on host permissiveness, and drug timing is a **graded early
+> viral-gene-expression window — not a hard 24-hour cutoff**. Treat rows below
+> as the historical parameter mapping, not current ODE semantics.
 
 ## Mechanism Mapping Table
 
 | Mechanism | Evidence from Papers | Model Representation | Parameters | Confidence | Next Refinement |
 |-----------|---------------------|---------------------|------------|------------|------------------|
-| **Sirolimus Early Replication Inhibition** | AJT-16-821.pdf: IC90 = 4 ng/mL, 90% inhibition via mTOR-S6K-kinase. Effective up to 24h post-infection during early gene expression, not during late gene expression. | `mtor_inhibition_factor = 0.5` applied to early replication transition. Time-windowed effectiveness (0-24h). | `mtor_inhibition_factor`: 0.5 (evidence-based IC90)<br>`early_window_end`: 24h (evidence-based)<br>`target_phase`: early_gene_expression | **HIGH** - Direct experimental measurement | Add exact concentration-response curve from Hirsch 2016 Figure |
-| **Tacrolimus Replication Activation via FKBP-12** | AJT-16-821.pdf: Activates replication through FKBP-12. Reverses sirolimus inhibition. FKBP-12 siRNA knockdown increases replication similar to tacrolimus. | `tacrolimus_enhancement_factor = 1.5` via FKBP-12 pathway. Opposite effect to sirolimus through same target. | `tacrolimus_enhancement_factor`: 1.5 (evidence-based)<br>`fkbp12_targeting`: FKBP1A gene (evidence-based)<br>`target_phase`: all_phases | **HIGH** - Mechanistic + clinical validation | Quantify enhancement vs baseline from Hirsch 2016 dose-response |
+| **Sirolimus Early Replication Inhibition** | AJT-16-821.pdf: IC90 = 4 ng/mL, 90% inhibition via mTOR-S6K-kinase. Effective up to 24h post-infection during early gene expression, not during late gene expression. | `mtor_inhibition_factor = 0.5` applied to early replication transition (legacy discrete sim). Time-windowed, graded early-phase effectiveness. | `mtor_inhibition_factor`: 0.5 (evidence-based IC90)<br>`early_window_end`: 24h (evidence-based)<br>`target_phase`: early_gene_expression | **HIGH** - Direct experimental measurement | Add exact concentration-response curve from Hirsch 2016 Figure |
+| **Tacrolimus Replication Activation via FKBP-12** | AJT-16-821.pdf: Activates replication through FKBP-12. Reverses sirolimus inhibition. FKBP-12 siRNA knockdown increases replication similar to tacrolimus. | `tacrolimus_enhancement_factor = 1.5` via FKBP-12 pathway. Opposite effect to sirolimus through same target. | `tacrolimus_enhancement_factor`: 1.5 (evidence-based)<br>`fkbp12_targeting`: FKBP1A gene (evidence-based)<br>`target_phase`: all_phases | **HIGH** - Mechanistic in-vitro evidence (FKBP-12 motif; no clinical validation of the model) | Quantify enhancement vs baseline from Hirsch 2016 dose-response |
 | **S Phase / G2M Upregulation Enables Replication** | JVI scRNA-seq (S3/S4): Upregulation of S phase / G2M / DNA damage repair programs in infected cells. CLSPN, TOP2A, MKI67 upregulated. | `cell_cycle_s_phase_bonus = 2.0` when cell_cycle_phase = S. DDR programs enhance permissiveness. | `cell_cycle_s_phase_bonus`: 2.0 (single-cell evidence)<br>`ddr_replication_enhancement`: 1.3 (single-cell evidence)<br>`target_genes`: CLSPN, TOP2A, MKI67 | **HIGH** - Direct single-cell quantification | Extract exact fold-changes from JVI S3/S4 for bonus coefficients |
 | **Innate Immune / Antigen Presentation Downregulation** | JVI scRNA-seq: Downregulation of antigen presentation, innate immunity, translation, autophagy in successful infection. | `innate_immune_suppression_factor = 0.5`. Immune activity limits replication. | `innate_immune_suppression_factor`: 0.5 (single-cell evidence)<br>`antigen_presentation_state`: Continuous 0-1 (NOT YET IMPLEMENTED) | **HIGH** - Clear single-cell signal | Add explicit MHC-I/II expression state variable |
 | **Mitochondrial Stress Signature (Late Replication)** | JVI scRNA-seq (S4): Discordant mitochondria-encoded vs nucleus-encoded expression. MT-ND4, MT-CO1, MT-CYB, MT-ATP6 upregulated in late BKPyV. | `mitochondrial_stress_emergence` during late replication. Mitochondrial dysfunction emerges post-24h. | `mitochondrial_stress_trigger_time`: 24h (single-cell inference)<br>`mitochondrial_genes_upregulated`: MT-ND4, MT-CO1, MT-CYB (evidence list) | **HIGH** - Direct single-cell observation | Add explicit mitochondrial stress state variable with expression signature |
-| **Early vs Late Replication Phases** | AJT-16-821.pdf: Sirolimus effective during early gene expression (0-24h), not during late gene expression. | `early_replication_phase`: 0-24h post-infection. `late_replication_phase`: 24h+. Drug effects time-dependent. | `early_replication_window_end`: 24h (evidence-based)<br>`drug_timing_sensitivity`: early_phase_specific (mechanistic) | **HIGH** - Direct experimental timing | Add explicit viral gene expression stage variable (early vs late) |
+| **Early vs Late Replication Phases** | AJT-16-821.pdf: Sirolimus effective during early gene expression (0-24h), not during late gene expression. | Legacy discrete sim: `early_replication_phase`/`late_replication_phase` split at 24h. ODE reframes as a graded early-window permissiveness gate. Drug effects time-dependent. | `early_replication_window_end`: 24h (evidence-based)<br>`drug_timing_sensitivity`: early_phase_specific (mechanistic) | **HIGH** - Direct experimental timing | Add explicit viral gene expression stage variable (early vs late) |
 | **DDR Programs as Permissiveness Factor** | JVI scRNA-seq (S4): BRCA1, BRCA2, PRKDC, FANCI, MMS22L upregulated in late BKPyV. | `dna_damage_response_enhancement = 1.3`. DDR upregulation increases replication permissiveness. | `ddr_replication_enhancement`: 1.3 (single-cell evidence)<br>`target_genes`: BRCA1, BRCA2, PRKDC (evidence list) | **MEDIUM** - Correlative, may be stress response | Distinguish permissive DDR from apoptotic DDR |
 | **DNA Synthesis Machinery Requirement** | AJT-16-821.pdf: BKPyV requires host DNA replication machinery. mTOR activity required for early replication. | `dna_replication_coupling = 0.8`. Viral replication modulated by host DNA synthesis state. | `dna_replication_coupling`: 0.8 (mechanistic consensus)<br>`host_dna_synthesis_state`: Enum (active/inactive/suppressed) | **HIGH** - Well-established mechanism | Use single-cell MCM complex expression to quantify coupling |
 
@@ -34,7 +49,7 @@ This document maps biological mechanisms identified from research papers to thei
 1. **Early vs Late Viral Gene Expression**: Required for drug timing effects and mitochondrial stress emergence
 2. **Mitochondrial Stress State**: Clear MT-gene signature in late BKPyV (S4 data)
 3. **Antigen Presentation Suppression**: MHC downregulation enables immune evasion
-4. **Time-Windowed Drug Effects**: Sirolimus only effective in first 24h (Hirsch 2016)
+4. **Time-Windowed Drug Effects** *(superseded framing)*: originally written as "sirolimus only effective in first 24h (Hirsch 2016)" — the canonical ODE implements this as a **graded early viral-gene-expression window**, not a hard cutoff
 
 ### Should Implement (Medium Priority)  
 5. **DDR Permissiveness vs Apoptosis**: DDR has dual role (early enhances, late triggers cell death)
@@ -47,7 +62,7 @@ This document maps biological mechanisms identified from research papers to thei
 Based on extracted research findings, the following parameters require refinement:
 
 ### Immediate Updates Required
-1. **Drug timing**: Implement 24h early window for sirolimus effectiveness
+1. **Drug timing** *(superseded by ODE reframing)*: was "implement 24h early window" — ODE uses a graded early-gene-expression permissiveness gate instead
 2. **Cell cycle bonuses**: Use JVI S3/S4 fold-changes for S/G2M genes (CLSPN, TOP2A, MKI67)
 3. **DDR gene list**: Update to include JVI S4 genes (BRCA1, BRCA2, PRKDC, FANCI, MMS22L)
 4. **Mitochondrial signature**: Add MT-gene list (MT-ND4, MT-CO1, MT-CYB, MT-ATP6) for late phase

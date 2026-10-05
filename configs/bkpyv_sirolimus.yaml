@@ -1,11 +1,13 @@
 # BKPyV Infection + Sirolimus (mTOR Inhibitor)
 # Research-grounded: Sirolimus suppresses BKPyV replication via mTOR inhibition
-# Experimental data: IC90 = 4 ng/mL (90% inhibition), effective only in early phase (0-24h)
+# Experimental data: IC90 = 4 ng/mL (90% inhibition), graded early-phase effectiveness window (Hirsch 2016)
 experiment_id: bkpyv_sirolimus_exposure
 plugin: transplant.bk_polyomavirus
 simulator: bkpyv_specific
 simulation_length: 100.0
 timestep: 1.0
+# Legacy discrete simulator: one timestep is one hour.
+time_unit: hours
 output_path: outputs/bkpyv/sirolimus/
 save_interval: 1
 seed: 42
@@ -31,7 +33,7 @@ perturbations:
     parameters:
       mechanism: "mTOR_inhibition"
       effect_on_viral_replication: "suppresses"
-      concentration_ng_per_mL: 5.0  # Above IC90 of 4 ng/mL
+      concentration_ng_per_mL: 5.0  # above in-vitro IC90 ~4 ng/mL (Hirsch 2016)
 
   - id: bkpyv_infection
     name: "BKPyV infection"
@@ -48,10 +50,10 @@ perturbations:
 simulator_parameters:
   # Drug effect parameters (sirolimus inhibition highlighted)
   tacrolimus_enhancement_factor: 2.0  # Baseline (no tacrolimus)
-  sirolimus_inhibition_factor: 0.5  # IC90 = 4 ng/mL
+  sirolimus_inhibition_factor: 0.5  # in-vitro IC90 ~4 ng/mL (Hirsch 2016)
   everolimus_inhibition_factor: 0.5
   drug_effectiveness_window: 24.0  # Critical: only effective in early phase
-  late_phase_drug_resistance: 0.3  # Reduced effectiveness in late phase
+  late_phase_drug_resistance: 0.3  # reduced late-phase effectiveness (graded window)
   
   # Viral replication parameters
   t_antigen_replication_threshold: 0.5

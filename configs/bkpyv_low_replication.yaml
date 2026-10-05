@@ -6,6 +6,8 @@ plugin: transplant.bk_polyomavirus
 simulator: bkpyv_specific
 simulation_length: 100.0
 timestep: 1.0
+# Legacy discrete simulator: one timestep is one hour.
+time_unit: hours
 output_path: outputs/bkpyv/low_replication/
 
 # Simulator parameters (research-validated)

@@ -32,8 +32,10 @@ try:
     from vcm.plugins.transplant.bk_polyomavirus import BKPolyomavirusPlugin
     from vcm.plugins.transplant.bk_polyomavirus.parameters import get_bkpyv_defaults
     from vcm.simulators.bkpyv_simulator import BKPyVSimulator
+    from vcm.simulators.bkpyv_ode_simulator import BKPyVODESimulator
     from vcm.clinical.viral_load_mapper import ClinicalViralLoadMapper, ClinicalThresholds
     from vcm.clinical.risk_prediction import RiskPredictionModule, ClinicalCovariates, VirtualCellFeatures
+    from vcm.viz.bkpyv_review import build_review_bundle
 except ImportError as e:
     st.error(f"Import error: {e}")
     st.warning("Please ensure all VCM modules are properly installed")
@@ -67,16 +69,25 @@ def run_bkpyv_simulation(config: dict) -> dict:
         
         # Load plugin
         plugin = BKPolyomavirusPlugin()
-        initial_state = plugin.create_initial_state()
+        initial_state = plugin.create_initial_state({"nccr_variant": config.get("nccr_variant", "archetype")})
         
         # Create simulator
-        simulator = BKPyVSimulator(sim_params)
-        
-        # Run simulation (simplified for UI - no perturbations for now)
+        # The UI uses the reviewable ODE engine so NCCR and S-phase outputs are
+        # the same quantities shown in the exported reviewer bundle.
+        simulator = BKPyVODESimulator(sim_params)
+
+        perturbations = []
+        if config.get("scenario") != "baseline_uninfected":
+            perturbations.append(Perturbation(id="bkpyv_infection", name="BKPyV infection", perturbation_type=PerturbationType.VIRAL_INFECTION, magnitude=1.0, timing=0.0))
+        if config.get("scenario") == "tacrolimus_exposure":
+            perturbations.append(Perturbation(id="tacrolimus_treatment", name="Tacrolimus immune-control exposure", perturbation_type=PerturbationType.DRUG_TREATMENT, target_id="FKBP1A", magnitude=1.0, timing=0.0))
+        if config.get("scenario") == "sirolimus_exposure":
+            perturbations.append(Perturbation(id="sirolimus_treatment", name="Sirolimus S-phase exposure", perturbation_type=PerturbationType.DRUG_TREATMENT, target_id="MTOR", magnitude=1.0, timing=0.0))
+
         n_steps = int(experiment_config.simulation_length / experiment_config.timestep)
         result = simulator.simulate(
             initial_state=initial_state,
-            perturbation=None,
+            perturbations=perturbations,
             n_steps=n_steps,
             timestep=experiment_config.timestep
         )
@@ -120,16 +131,12 @@ def extract_trajectory_data(result) -> dict:
 def convert_to_clinical_viral_load(virtual_loads: list, timepoints: list) -> dict:
     """Convert virtual cell viral load to clinical plasma viral load."""
     mapper = ClinicalViralLoadMapper()
-    
-    clinical_trajectory = mapper.simulate_viral_load_trajectory(
-        virtual_loads=virtual_loads,
-        timepoints=timepoints,
-        infected_cell_fraction=0.01,
-        drug_effect=1.0,
-        use_log_scale=False,  # Get actual copies/mL
-    )
-    
-    return clinical_trajectory
+    plasma = [mapper.normalized_to_copies(float(v)) for v in virtual_loads]
+    return {
+        "timepoints": list(timepoints),
+        "plasma_viral_load": plasma,
+        "risk_categories": [ClinicalThresholds.get_risk_category(v) for v in plasma],
+    }
 
 
 def plot_viral_load_trajectory(timepoints: list, viral_loads: list, title: str = "Viral Load Trajectory"):
@@ -162,7 +169,7 @@ def plot_viral_load_trajectory(timepoints: list, viral_loads: list, title: str =
     
     fig.update_layout(
         title=title,
-        xaxis_title="Time (hours)",
+        xaxis_title="Time (days)",
         yaxis_title="Viral Load (copies/mL)",
         yaxis_type="log",
         template="plotly_white",
@@ -197,7 +204,7 @@ def plot_phase_transitions(timepoints: list, phases: list):
     
     fig.update_layout(
         title="Viral Replication Phase Transitions",
-        xaxis_title="Time (hours)",
+        xaxis_title="Time (days)",
         yaxis_title="Replication Phase",
         template="plotly_white",
         height=400,
@@ -222,7 +229,7 @@ def plot_mitochondrial_stress(timepoints: list, stress_levels: list):
     
     fig.update_layout(
         title="Mitochondrial Stress Over Time",
-        xaxis_title="Time (hours)",
+        xaxis_title="Time (days)",
         yaxis_title="Stress Level (0-1)",
         template="plotly_white",
         height=400,
@@ -241,15 +248,15 @@ def st_page_header():
     
     st.markdown("""
     # 🦠 BKPyV Virtual Cell Model
-    **BK Polyomavirus Nephropathy - Clinical Decision Support System**
+    **BK Polyomavirus Nephropathy - Research Simulation Studio**
     
-    This tool uses virtual cell simulations to predict BK virus replication kinetics
-    and assess clinical risk for kidney transplant patients.
+    This tool explores mechanistic BKPyV production hypotheses in a renal-cell model.
+    It is a research sandbox, not a clinical decision-support system.
     """)
     
     st.info("""
-    **🔬 Research Grounded:** All parameters are based on published clinical studies 
-    and single-cell transcriptomic data. See the documentation for detailed citations.
+    **🔬 Evidence-aware:** The model separates evidence-supported mechanisms from
+    phenomenological coefficients. Outputs are hypotheses, not patient predictions.
     """)
 
 
@@ -265,6 +272,7 @@ def st_sidebar_navigation():
             "📊 Visualization",
             "🧬 Risk Prediction",
             "📋 Comparison",
+            "🔎 Review Bundle",
             "📚 Documentation",
         ]
     )
@@ -307,7 +315,7 @@ def st_home_page():
     
     with st.expander("🔬 Research Grounding"):
         st.markdown("""
-        - **Drug Mechanisms**: Tacrolimus activates replication (OR 2.0-2.3), Sirolimus inhibits (IC90 = 4 ng/mL)
+        - **Drug Mechanisms**: Tacrolimus weakens immune control; sirolimus can reduce S-phase permissiveness
         - **Clinical Risk Factors**: Age, sex, prior transplant, HLA mismatch
         - **Single-Cell Signatures**: Mitochondrial stress, cell cycle coupling, immune evasion
         - **Guidelines**: Screening thresholds ≥1,000 and ≥10,000 copies/mL
@@ -334,6 +342,12 @@ def st_simulation_page():
         "Choose simulation scenario",
         options=list(scenario_options.keys()),
         format_func=lambda x: scenario_options[x],
+    )
+
+    nccr_variant = st.selectbox(
+        "NCCR scenario",
+        ["archetype", "rearranged"],
+        help="Archetype is the presumed persistent form; rearranged is a hypothesis-testing scenario with early-gene bias and reduced capsid expression.",
     )
     
     # Parameter adjustment
@@ -395,10 +409,12 @@ def st_simulation_page():
             config = {
                 'experiment_id': f'bkpyv_{scenario}',
                 'plugin': 'transplant.bk_polyomavirus',
-                'simulator': 'bkpyv_specific',
+                'simulator': 'bkpyv_ode',
                 'simulation_length': 100.0,
                 'timestep': 1.0,
                 'output_path': 'outputs/bkpyv/ui/',
+                'scenario': scenario,
+                'nccr_variant': nccr_variant,
                 'simulator_parameters': {
                     'tacrolimus_enhancement_factor': tacrolimus_enhancement,
                     'sirolimus_inhibition_factor': sirolimus_inhibition,
@@ -416,7 +432,13 @@ def st_simulation_page():
                 st.success("Simulation completed successfully!")
                 st.session_state.simulation_result = result
                 st.session_state.simulation_config = config
-                
+                run_label = _history_label(config, len(st.session_state.simulation_history) + 1)
+                st.session_state.simulation_history[run_label] = {
+                    "result": result["result"],
+                    "config": config,
+                    "label": run_label,
+                }
+
                 # Display summary
                 trajectory_data = extract_trajectory_data(result['result'])
                 st.write(f"**Final Virtual Viral Load:** {trajectory_data['viral_loads'][-1]:.3f}")
@@ -427,7 +449,27 @@ def st_simulation_page():
                     trajectory_data['viral_loads'],
                     trajectory_data['timepoints']
                 )
-                st.write(f"**Peak Clinical Viral Load:** {clinical_data['plasma_viral_load'][-1]:.0f} copies/mL")
+                st.write(f"**Peak Clinical Viral Load:** {max(clinical_data['plasma_viral_load']):.0f} copies/mL")
+
+                export_frame = pd.DataFrame({
+                    "time_hours": trajectory_data["timepoints"],
+                    "virtual_viral_load": trajectory_data["viral_loads"],
+                    "plasma_copies_per_ml": clinical_data["plasma_viral_load"],
+                    "risk_category": [
+                        ClinicalThresholds.get_risk_category(load)
+                        for load in clinical_data["plasma_viral_load"]
+                    ],
+                    "replication_phase": trajectory_data["replication_phase"],
+                    "mitochondrial_stress": trajectory_data["mitochondrial_stress"],
+                    "immune_suppression": trajectory_data["immune_suppression"],
+                })
+                st.download_button(
+                    "Download trajectory CSV",
+                    data=export_frame.to_csv(index=False),
+                    file_name="bkpyv_virtual_patient_trajectory.csv",
+                    mime="text/csv",
+                    help="Export the current virtual-patient trajectory and clinical bridge for review.",
+                )
                 
             else:
                 st.error(f"Simulation failed: {result['error']}")
@@ -438,7 +480,7 @@ def st_visualization_page():
     st.markdown("## 📊 Simulation Visualization")
     
     # Check if simulation results are available
-    if 'simulation_result' not in st.session_state:
+    if not st.session_state.get('simulation_result'):
         st.warning("No simulation results available. Run a simulation first in the Simulation page.")
         return
     
@@ -524,7 +566,7 @@ def st_visualization_page():
         )):
             if i % 10 == 0:  # Show every 10th timepoint
                 risk_data.append({
-                    'Time (hours)': time,
+                    'Time (days)': time,
                     'Viral Load (copies/mL)': f"{load:.0f}",
                     'Risk Category': risk.upper(),
                     'Screening Positive': load >= ClinicalThresholds.SCREENING_POSITIVE,
@@ -592,6 +634,12 @@ def st_risk_prediction_page():
     # Risk prediction button
     st.markdown("---")
     
+    st.caption(
+        "This page applies a hand-specified additive heuristic over clinical "
+        "risk factors. It is NOT a fitted statistical model and the displayed "
+        "score is not a calibrated probability."
+    )
+
     if st.button("🎯 Predict Risk", type="primary"):
         # Create clinical covariates object
         clinical_data = ClinicalCovariates(
@@ -610,8 +658,8 @@ def st_risk_prediction_page():
             serum_creatinine=serum_creatinine,
         )
         
-        # Calculate baseline clinical risk (simplified)
-        clinical_risk = 0.1  # Base risk
+        # Heuristic additive score (not a fitted/calibrated probability)
+        clinical_risk = 0.1  # base score
         
         # Add risk factors
         if age > 50:
@@ -635,24 +683,19 @@ def st_risk_prediction_page():
         clinical_risk = max(0.0, min(1.0, clinical_risk))
         
         # Display results
-        col1, col2, col3 = st.columns(3)
-        
+        col1, col2 = st.columns(2)
+
         with col1:
-            st.metric("Clinical Risk Probability", f"{clinical_risk:.2%}")
-        
+            st.metric("Heuristic Risk Score (not calibrated)", f"{clinical_risk:.2f}")
+
         with col2:
             if clinical_risk < 0.3:
                 risk_category = "LOW"
-                st.metric("Risk Category", risk_category, delta_color="normal")
             elif clinical_risk < 0.7:
                 risk_category = "MEDIUM"
-                st.metric("Risk Category", risk_category, delta_color="normal")
             else:
                 risk_category = "HIGH"
-                st.metric("Risk Category", risk_category, delta_color="inverse")
-        
-        with col3:
-            st.metric("Model Confidence", "85%")
+            st.metric("Risk Category", risk_category)
         
         # Recommendations
         st.subheader("Clinical Recommendations")
@@ -665,26 +708,181 @@ def st_risk_prediction_page():
             st.error("⚠️ High Risk - Implement weekly monitoring, reduce immunosuppression, consider sirolimus")
 
 
+def _history_label(config: dict, index: int) -> str:
+    """Build a display label for a stored simulation run."""
+    scenario = config.get("scenario", "custom")
+    nccr = config.get("nccr_variant", "archetype")
+    return f"run {index}: {scenario} | NCCR {nccr}"
+
+
+def _shared_time_window(entries: list):
+    """Return the overlapping (start_day, end_day) window across runs, or None."""
+    starts = []
+    ends = []
+    for entry in entries:
+        times = extract_trajectory_data(entry["result"])["timepoints"]
+        if not times:
+            return None
+        starts.append(min(times))
+        ends.append(max(times))
+    window = (max(starts), min(ends))
+    return window if window[1] > window[0] else None
+
+
+def _comparison_metrics(label: str, entry: dict) -> dict:
+    """Compute display metrics directly from a stored run's trajectory."""
+    trajectory = extract_trajectory_data(entry["result"])
+    loads = trajectory["viral_loads"]
+    times = trajectory["timepoints"]
+    peak = max(loads)
+    config = entry.get("config", {})
+    return {
+        "run": label,
+        "scenario": config.get("scenario", "?"),
+        "nccr_variant": config.get("nccr_variant", "?"),
+        "engine": config.get("simulator", "?"),
+        "timestep_days": config.get("timestep", "?"),
+        "horizon_days": config.get("simulation_length", "?"),
+        "peak_virtual_load": peak,
+        "peak_day": times[loads.index(peak)],
+        "endpoint_load": loads[-1],
+    }
+
+
+def _bridge_metrics(label: str, entry: dict) -> dict:
+    """Assumption-labelled bridge metrics (copies/mL) for a stored run."""
+    trajectory = extract_trajectory_data(entry["result"])
+    clinical = convert_to_clinical_viral_load(
+        trajectory["viral_loads"], trajectory["timepoints"]
+    )
+    peak_plasma = max(clinical["plasma_viral_load"])
+    return {
+        "run": label,
+        "peak_plasma_copies_per_ml": peak_plasma,
+        "peak_risk_category": ClinicalThresholds.get_risk_category(peak_plasma),
+    }
+
+
+def _windowed_series(trajectory: dict, window: tuple):
+    """Return (times, values) restricted to the shared day window."""
+    times = trajectory["timepoints"]
+    loads = trajectory["viral_loads"]
+    xs = [t for t in times if window[0] <= t <= window[1]]
+    ys = [v for t, v in zip(times, loads) if window[0] <= t <= window[1]]
+    return xs, ys
+
+
 def st_comparison_page():
-    """Display comparison page for different scenarios."""
+    """Display comparison page for stored simulation runs."""
     st.markdown("## 📋 Scenario Comparison")
-    
-    st.info("""
-    **Tip:** Run multiple simulations in the Simulation page with different parameters,
-    then compare their viral load trajectories here.
-    """)
-    
-    # This would compare multiple simulation results
-    # For now, show placeholder
-    st.subheader("Comparative Analysis")
-    
-    st.write("This feature allows comparison of:")
-    st.write("- Tacrolimus vs Sirolimus drug effects")
-    st.write("- Low vs High replication scenarios")
-    st.write("- Different patient risk profiles")
-    st.write("- Parameter sensitivity analysis")
-    
-    st.warning("Complete simulations in the Simulation page first, then compare results here.")
+
+    history = st.session_state.get("simulation_history", {})
+
+    if len(history) < 2:
+        st.info(
+            "**How to populate this page:** run at least two simulations in the "
+            "Simulation page (for example, tacrolimus vs sirolimus exposure, or "
+            "archetype vs rearranged NCCR). Each completed run is stored here "
+            "for side-by-side comparison."
+        )
+        st.write(f"Stored runs available: **{len(history)}** (need at least 2)")
+        return
+
+    labels = list(history.keys())
+    selected = st.multiselect(
+        "Runs to compare (select at least 2)",
+        options=labels,
+        default=labels[:2],
+    )
+
+    if len(selected) < 2:
+        st.warning("Select at least two stored runs to compare.")
+        return
+
+    entries = [history[label] for label in selected]
+    window = _shared_time_window(entries)
+    if window is None:
+        st.error(
+            "Selected runs do not share an overlapping time window; "
+            "trajectories cannot be aligned."
+        )
+        return
+
+    fig = go.Figure()
+    for label, entry in zip(selected, entries):
+        xs, ys = _windowed_series(
+            extract_trajectory_data(entry["result"]), window
+        )
+        fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name=label))
+    fig.update_layout(
+        title="Stored run trajectories",
+        xaxis_title="Time (days)",
+        yaxis_title="Normalized viral load (model units)",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption(
+        f"Runs are overlaid on their own recorded timestamps within the shared "
+        f"day window {window[0]:g}–{window[1]:g}; each run's timestep and "
+        "horizon are listed in the table below."
+    )
+
+    show_bridge = st.checkbox(
+        "Show clinical bridge view (assumption-labelled)", value=False
+    )
+
+    st.subheader("Run metrics")
+    rows = []
+    for label, entry in zip(selected, entries):
+        row = _comparison_metrics(label, entry)
+        if show_bridge:
+            row.update(_bridge_metrics(label, entry))
+        rows.append(row)
+    st.dataframe(pd.DataFrame(rows), use_container_width=True)
+
+    if show_bridge:
+        bridge_fig = go.Figure()
+        for label, entry in zip(selected, entries):
+            trajectory = extract_trajectory_data(entry["result"])
+            clinical = convert_to_clinical_viral_load(
+                trajectory["viral_loads"], trajectory["timepoints"]
+            )
+            xs = [t for t in clinical["timepoints"] if window[0] <= t <= window[1]]
+            ys = [
+                v
+                for t, v in zip(clinical["timepoints"], clinical["plasma_viral_load"])
+                if window[0] <= t <= window[1]
+            ]
+            bridge_fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name=label))
+        bridge_fig.update_layout(
+            title="Clinical bridge trajectories",
+            xaxis_title="Time (days)",
+            yaxis_title="Plasma viral load (copies/mL, assumption-labelled)",
+            yaxis_type="log",
+        )
+        st.plotly_chart(bridge_fig, use_container_width=True)
+        st.caption(
+            "Assumption-labelled bridge: normalized model output is mapped to "
+            "copies/mL through a fixed anchor scale for hypothesis "
+            "visualization only. It is not a calibration to patient data."
+        )
+
+
+def st_review_bundle_page():
+    """Generate and display the reproducible reviewer-facing output bundle."""
+    st.markdown("## 🔎 Research Review Bundle")
+    st.caption("This page regenerates the figures and tables from the ODE model so a reviewer can inspect assumptions, outputs, and sensitivity in one place.")
+    days = st.slider("Simulation horizon (model days)", 15, 120, 60)
+    if st.button("Generate review bundle", type="primary"):
+        with st.spinner("Running scenarios and sensitivity sweep..."):
+            paths = build_review_bundle(days=float(days))
+        st.success("Review bundle generated.")
+        st.image(paths["trajectory"], caption="Mechanistic trajectory")
+        st.image(paths["nccr"], caption="Archetype versus rearranged NCCR")
+        st.image(paths["drugs"], caption="Drug mechanism comparison")
+        st.image(paths["sensitivity"], caption="Parameter sensitivity")
+        st.download_button("Download trajectory data", Path(paths["trajectory_data"]).read_bytes(), file_name="trajectory_data.csv")
+        st.download_button("Download scenario summary", Path(paths["summary"]).read_bytes(), file_name="scenario_summary.csv")
+        st.download_button("Download review manifest", Path(paths["manifest"]).read_bytes(), file_name="manifest.json")
 
 
 def st_documentation_page():
@@ -734,7 +932,7 @@ def st_documentation_page():
         
         **Key Components:**
         1. **Viral Replication Dynamics**: T antigen-dependent, cell-cycle coupled replication
-        2. **Drug Effects**: Tacrolimus (enhances) vs Sirolimus (inhibits) through FKBP-12 pathway
+        2. **Drug Effects**: Tacrolimus changes immune control; sirolimus changes mTOR/S-phase permissiveness
         3. **Host Response**: DNA damage response, innate immunity, mitochondrial stress
         4. **Cell Cycle**: S-phase optimal for viral replication
         5. **Immune Evasion**: Antigen presentation suppression, interferon response downregulation
@@ -745,7 +943,7 @@ def st_documentation_page():
         
         **Validation:**
         The model reproduces key qualitative patterns from research:
-        - Tacrolimus enhances replication, sirolimus suppresses
+        - Tacrolimus may increase whole-system production by reducing immune control; this is not direct genome-copying enhancement
         - Drug timing effects (sirolimus effective only in early phase)
         - Cell-cycle and DNA-repair permissiveness effects
         - Mitochondrial stress signature in late infection
@@ -756,7 +954,7 @@ def st_documentation_page():
         
         st.markdown("""
         **Drug Effect Parameters (High Confidence):**
-        - `tacrolimus_enhancement_factor`: 2.0-2.3 (clinical OR data)
+        - `tacrolimus_enhancement_factor`: compatibility parameter for immune-control sensitivity; not a direct replication rate
         - `sirolimus_inhibition_factor`: 0.5 (IC90 = 4 ng/mL)
         - `drug_effectiveness_window`: 24h (early phase only)
         - `late_phase_drug_resistance`: 0.3 (reduced effectiveness)
@@ -783,7 +981,7 @@ def st_documentation_page():
         1. **Hirsch et al., Am J Transplant 2016**
            "BK Polyomavirus Replication in Renal Tubular Epithelial Cells Is Inhibited by Sirolimus, 
            but Activated by Tacrolimus Through a Pathway Involving FKBP-12"
-           - Drug mechanisms: Tacrolimus activates, sirolimus inhibits via FKBP-12
+           - Drug mechanisms: tacrolimus reduces immune control; sirolimus inhibits permissive cell-cycle signaling
            - Sirolimus IC90 = 4 ng/mL, effective in early phase (0-24h)
         
         2. **Weissbach et al., J Virol 2024**
@@ -791,16 +989,14 @@ def st_documentation_page():
            - Cell cycle coupling, mitochondrial stress signature
            - Immune evasion mechanisms
         
-        3. **Clinical Cohort Studies**
-           - Tacrolimus OR 2.0-2.3 for BKPyVAN vs belatacept
-           - Age >50 years OR 1.75-1.99
-           - Male sex OR 2.22-2.42
-           - Prior transplant OR 2.79-3.28
-           
+        3. **Clinical risk factors** (see docs/ISEF_PROJECT_OVERVIEW.md for citations)
+           - Directions from systematic review evidence (Demey et al. 2018): tacrolimus-based regimens, male sex, older age, prior transplant
+           - Specific ORs are illustrative in this app, not fitted
+
         **Data Sources:**
-        - Clinical tables extracted from DOCX files (data/research/docx/extracted_tables/)
-        - Single-cell data: GEO GSE317012
-        - Clinical guidelines: KDIGO, AST consensus statements
+        - Consensus thresholds: AST IDCOP 2019; Kotton et al. (Transplantation) 2024
+        - Single-cell biology (qualitative): Weissbach et al., J Virol 2024; Needham et al., PLoS Pathog 2024
+        - No patient-cohort dataset is bundled; do not present outputs as patient-calibrated
         """)
 
 
@@ -813,6 +1009,8 @@ def main():
         st.session_state.simulation_result = None
     if 'simulation_config' not in st.session_state:
         st.session_state.simulation_config = None
+    if 'simulation_history' not in st.session_state:
+        st.session_state.simulation_history = {}
     
     # Sidebar navigation
     page = st_sidebar_navigation()
@@ -828,6 +1026,8 @@ def main():
         st_risk_prediction_page()
     elif page == "📋 Comparison":
         st_comparison_page()
+    elif page == "🔎 Review Bundle":
+        st_review_bundle_page()
     elif page == "📚 Documentation":
         st_documentation_page()
 

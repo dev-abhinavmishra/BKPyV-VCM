@@ -69,9 +69,14 @@ class TestViralLoadMapper:
         assert result < 10.0, f"Expected near 0, got {result}"
     
     def test_anchor_point_1_0(self):
-        """Test that normalized viral load 1.0 produces near Vmax (1e7)."""
+        """Bridge anchors are reproduced exactly by construction."""
         result = self.mapper.normalized_to_copies(1.0)
-        assert result > 1e6, f"Expected >1e6, got {result}"
+        # V = 1.0 is anchored to the presumptive-PyVAN threshold (10,000)
+        assert abs(result - 10000.0) < 1.0, f"Expected ~10,000 anchor, got {result}"
+        # screening anchor
+        assert abs(self.mapper.normalized_to_copies(0.2) - 1000.0) < 1.0
+        # detection-limit anchor
+        assert abs(self.mapper.normalized_to_copies(0.02) - 100.0) < 1.0
     
     def test_monotonicity(self):
         """Test that output increases monotonically with input."""
@@ -159,10 +164,12 @@ class TestViralLoadMapper:
         assert (df['copies_per_ml'] >= 0).all(), "Clinical copies should be non-negative"
     
     def test_simulate_clinical_trajectory_viral_load_range(self):
-        """Test that viral load stays within valid range."""
+        """Viral load is dimensionless ODE output: non-negative, finite, may exceed 1."""
         df = self.mapper.simulate_clinical_trajectory('infection', weeks=20)
-        
-        assert (df['viral_load_norm'] <= 1.0).all(), "Viral load should not exceed 1.0"
+
+        assert (df['viral_load_norm'] >= 0).all(), "Viral load should be non-negative"
+        assert df['viral_load_norm'].notna().all(), "Viral load should be finite"
+        assert (df['copies_per_ml'] >= 0).all()
 
 
 class TestClinicalSummary:

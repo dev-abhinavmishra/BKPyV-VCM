@@ -1,0 +1,39 @@
+{
+  "scope": "internal consistency checks on the BKPyV ODE model; NOT validation against patient data",
+  "checks": [
+    {
+      "check": "sirolimus_reduces_burden",
+      "expected": "sirolimus peak < baseline peak",
+      "baseline_peak": 4.2777609281361775,
+      "sirolimus_peak": 1.9257261573825615,
+      "pass": true,
+      "reference": "Hirsch 2016 (in vitro)"
+    },
+    {
+      "check": "infection_persists_baseline",
+      "expected": "baseline final > 0.1 at day 120 (sustained, not self-clearing)",
+      "baseline_final": 0.39268982003154157,
+      "pass": true,
+      "reference": "Funk 2006 (persistent replication under immunosuppression)"
+    },
+    {
+      "check": "tacrolimus_increases_persistence",
+      "expected": "tacrolimus final viral load > baseline final",
+      "baseline_final": 0.39268982003154157,
+      "tacrolimus_final": 0.8539644446140401,
+      "pass": true,
+      "reference": "Hirsch 2016 (in vitro); tacrolimus modeled via immune control"
+    },
+    {
+      "check": "sphase_gate_blocks_lt",
+      "expected": "peak LT without host-DNA coupling < 25% of default",
+      "lt_peak_default": 1.8640889963704357,
+      "lt_peak_no_coupling": 0.3,
+      "pass": true,
+      "reference": "Needham 2024 (host S phase precedes TAg)"
+    }
+  ],
+  "checks_passed": 4,
+  "checks_total": 4,
+  "all_passed": true
+}

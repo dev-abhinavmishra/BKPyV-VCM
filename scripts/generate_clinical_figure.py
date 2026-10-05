@@ -7,6 +7,9 @@ and generates publication-quality figures of clinical viral load trajectories.
 
 import sys
 from pathlib import Path
+import matplotlib
+matplotlib.use("Agg")
+
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np

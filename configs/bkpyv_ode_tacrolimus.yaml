@@ -1,0 +1,69 @@
+# BKPyV ODE Tacrolimus Configuration
+# ODE-based simulation of BKPyV infection with tacrolimus treatment
+experiment_id: bkpyv_ode_tacrolimus
+plugin: transplant.bk_polyomavirus
+simulator: bkpyv_ode
+simulation_length: 100.0
+timestep: 1.0
+time_unit: days
+output_path: outputs/bkpyv/ode_tacrolimus/
+save_interval: 1
+seed: 42
+
+# Environment settings (physiological conditions)
+environment:
+  temperature: 37.0
+  ph: 7.4
+  oxygen_level: 21.0
+  glucose_concentration: 5.0
+  nutrient_availability: {}
+  stress_factors: {}
+
+# BKPyV infection and tacrolimus treatment
+perturbations:
+  - id: bkpyv_infection
+    name: BKPyV infection
+    perturbation_type: viral_infection
+    target_id: null
+    magnitude: 1.0
+    timing: 10.0
+    duration: null
+    parameters:
+      viral_strain: "BKPyV genotype I"
+      multiplicity_of_infection: 1.0
+  
+  - id: tacrolimus_treatment
+    name: Tacrolimus treatment
+    perturbation_type: drug_treatment
+    target_id: FKBP1A  # Tacrolimus binding protein
+    magnitude: 1.0  # Full therapeutic dose
+    timing: 0.0  # Start at beginning
+    duration: null  # Continuous treatment
+    parameters:
+      drug_concentration: "therapeutic"
+      mechanism: "calcineurin_inhibition"
+
+# ODE solver configuration
+simulator_parameters:
+  # ODE solver settings
+  ode_solver: LSODA  # Adaptive stiff/non-stiff solver
+  rtol: 1.0e-6  # Relative tolerance
+  atol: 1.0e-8  # Absolute tolerance
+  max_step: 1.0  # Maximum step size
+  
+  # Research-validated parameters (mapped to ODE coefficients)
+  tacrolimus_enhancement_factor: 1.5  # weaker immune targeting -> higher production (FKBP-12 motif, Hirsch 2016)
+  mtor_inhibition_factor: 0.5  # in-vitro IC90 ~4 ng/mL (Hirsch 2016)
+  t_antigen_replication_threshold: 0.5  # T antigen requirement
+  cell_cycle_s_phase_bonus: 2.0  # S-phase replication enhancement
+  dna_replication_coupling: 0.8  # Host-viral replication coupling
+  innate_immune_suppression_factor: 0.5  # Immune suppression of replication
+  dna_damage_response_enhancement: 1.3  # DDR enhancement of replication
+  translation_enhancement_factor: 2.0  # Translation pathway elevation
+  mitochondrial_function_importance: 0.8  # Mitochondrial gene upregulation
+  protein_degradation_inhibition: 0.3  # Proteasome pathway involvement
+
+metadata:
+  description: "ODE-based BKPyV infection with tacrolimus treatment (calcineurin inhibitor)"
+  research_grounding: "Tacrolimus modelled as weakened immune control; in-vitro anchor: Hirsch et al., Am J Transplant 2016;16(3):821-832 (activation via FKBP-12 in primary RPTECs)"
+  notes: "Continuous dosing intensity from day 0; expect higher peak and more persistent viral load than the no-drug infection scenario"

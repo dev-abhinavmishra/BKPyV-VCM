@@ -1,11 +1,19 @@
 """Command-line interface for VCM."""
 
+import sys
 from pathlib import Path
 from typing import Optional
 
 import click
 from rich.console import Console
 from rich.table import Table
+
+# Windows consoles default to cp1252 and crash on glyphs like "✓"
+try:  # pragma: no cover - platform dependent
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, OSError):
+    pass
 
 from vcm.experiments.runner import ExperimentComparator, ExperimentRunner
 from vcm.plugins.bacteria.minimal_cell import MinimalCellPlugin

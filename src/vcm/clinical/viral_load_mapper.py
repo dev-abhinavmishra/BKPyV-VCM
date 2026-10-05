@@ -1,119 +1,137 @@
 """Clinical Viral Load Mapper for BKPyV Plugin.
 
-This module provides the mapping between virtual cell viral load (0-1 scale) 
-and clinical plasma viral load (copies/mL) to bridge simulations to real-world 
-clinical decision-making.
+Bridges the model's dimensionless viral-load variable V (ODE units, unbounded)
+to indicative plasma BKPyV-DNAemia in copies/mL.
 
-Research Grounding:
-- Clinical guidelines: BK viremia thresholds ≥1,000 and ≥10,000 copies/mL
-- Source: Favi et al. 2019 (PMC6369392), UK BTS Guidelines
-- Hill function fitted to clinical anchor points
+IMPORTANT INTERPRETATION BOUNDARY
+---------------------------------
+There is no measured patient dataset in this repository to fit against, so this
+bridge is an explicitly-labelled ASSUMPTION SET, not a calibration: the model's
+V is mapped through piecewise log-linear interpolation between anchor points
+that correspond to consensus clinical thresholds (1,000 and 10,000 copies/mL;
+AST Infectious Diseases Community of Practice 2019 guideline, and Kotton et
+al., Second International Consensus Guidelines, Transplantation 2024). Treat
+the resulting copies/mL as an order-of-magnitude visualisation aid.
+
+Previous versions used a Hill function "fitted" to anchors (0.3 -> 1,000,
+0.6 -> 10,000, 1.0 -> 1e7). Those anchors were impossible for a saturating
+Hill with Vmax = 1e7, so the shipped fit missed them by one to four orders of
+magnitude while reporting the anchors as if they were reproduced. The current
+interpolation scheme reproduces every anchor exactly, by construction.
 
 Reference Sources:
-- Favi et al. 2019. PMCID: PMC6369392
-- UK BTS Guidelines for BKV nephropathy monitoring
+- AST Infectious Diseases Community of Practice: Hirsch HH, Randhawa PS.
+  BK polyomavirus in solid organ transplantation. Clin Transplant
+  2019;33(9):e13528.
+- Kotton CN, et al. The Second International Consensus Guidelines on BK
+  polyomavirus in kidney transplantation. Transplantation 2024;108(9):1834-1866.
 """
 
 import json
 import numpy as np
 import pandas as pd
-from scipy.optimize import curve_fit
 from pathlib import Path
-from typing import Optional, Dict, List
-import sys
+from typing import Optional, Dict
 
 
 def hill_function(vl, Vmax, K, n):
-    """Hill equation: copies_per_mL = Vmax * (vl^n) / (K^n + vl^n)
-    
-    Args:
-        vl: Normalized viral load (0-1)
-        Vmax: Maximum viral load (copies/mL)
-        K: Half-saturation constant
-        n: Hill coefficient (cooperativity)
-        
-    Returns:
-        copies_per_mL: Clinical viral load in copies/mL
+    """Hill equation: copies_per_mL = Vmax * (vl^n) / (K^n + vl^n).
+
+    DEPRECATED for the default mapping (kept for API compatibility and the
+    existing test-suite): the historical Hill anchors were not jointly
+    satisfiable, so the mapper now uses piecewise log-linear interpolation
+    (see ``ViralLoadMapper``).
     """
     return Vmax * (vl**n) / (K**n + vl**n)
 
 
-def fit_hill_parameters():
-    """Fit Hill function parameters to clinical anchor points.
-    
-    Anchor points:
-    - viral_load = 0.0  → copies/mL ≈ 0
-    - viral_load = 0.3  → copies/mL = 1,000  (screening threshold)
-    - viral_load = 0.6  → copies/mL = 10,000 (treatment threshold)
-    - viral_load = 1.0  → copies/mL = 10^7   (severe nephropathy range)
-    
-    Uses bounded optimization to ensure reasonable Hill coefficient (n) 
-    for smoother clinical transitions.
-    
-    Returns:
-        dict: Fitted parameters (Vmax, K, n)
+# Anchor points of the clinical bridge, in ODE viral-load units V -> copies/mL.
+# These are ASSUMPTIONS chosen so the bridge passes through consensus clinical
+# thresholds at biologically plausible points of the simulated trajectory;
+# they are not fitted to patient data.
+DEFAULT_ANCHORS = [
+    (0.0, 0.0),       # no virus
+    (0.02, 100.0),    # ~assay detection limit
+    (0.2, 1000.0),    # screening threshold (AST IDCOP 2019 / Kotton 2024)
+    (1.0, 10000.0),   # presumptive-PyVAN threshold (same guidelines)
+    (3.0, 1e6),       # established viremia, order-of-magnitude
+    (5.0, 1e7),       # high-level viremia, order-of-magnitude
+]
+
+
+def build_bridge_parameters():
+    """Build the (deterministic) bridge-parameter record.
+
+    The mapping is piecewise log-linear between anchors, so every anchor is
+    reproduced exactly by construction. The record advertises that fact in its
+    ``fit_quality`` block instead of pretending to be a statistical fit.
     """
-    # Anchor points for fitting
-    vl_values = np.array([0.3, 0.6, 1.0])
-    copies_values = np.array([1000, 10000, 1e7])
-    
-    # Fix Vmax to 1e7 (severe nephropathy range)
-    Vmax_fixed = 1e7
-    
-    # Fit n and K given Vmax
-    def hill_fixed_vmax(vl, K, n):
-        return hill_function(vl, Vmax_fixed, K, n)
-    
-    # Initial guesses: K=0.5, n=2 (more reasonable than steep hill)
-    p0 = [0.5, 2.0]
-    
-    # Add bounds to prevent unrealistic steepness
-    # K between 0.1 and 0.9, n between 1 and 5
-    bounds = ([0.1, 1.0], [0.9, 5.0])
-    
-    # Fit parameters with bounds
-    popt, pcov = curve_fit(hill_fixed_vmax, vl_values, copies_values, p0=p0, bounds=bounds, maxfev=10000)
-    
-    K_fit, n_fit = popt
-    K_std, n_std = np.sqrt(np.diag(pcov))
-    
-    params = {
-        'Vmax': Vmax_fixed,
-        'K': float(K_fit),
-        'n': float(n_fit),
-        'K_std': float(K_std),
-        'n_std': float(n_std),
-        'source': 'Favi et al. 2019 (PMC6369392), UK BTS Guidelines',
-        'fit_method': 'Bounded curve_fit (n: 1-5, K: 0.1-0.9) for smooth clinical transitions',
-        'anchor_points': [
-            {'viral_load': 0.0, 'copies_per_ml': 0, 'description': 'No infection'},
-            {'viral_load': 0.3, 'copies_per_ml': 1000, 'description': 'Screening threshold'},
-            {'viral_load': 0.6, 'copies_per_ml': 10000, 'description': 'Treatment threshold'},
-            {'viral_load': 1.0, 'copies_per_ml': 1e7, 'description': 'Severe nephropathy'}
-        ]
+    anchors_vl = np.array([a[0] for a in DEFAULT_ANCHORS], dtype=float)
+    anchors_cp = np.array([a[1] for a in DEFAULT_ANCHORS], dtype=float)
+    predicted = np.array([piecewise_loglinear(v, anchors_vl, anchors_cp) for v in anchors_vl])
+    percent_error = np.where(
+        anchors_cp > 0, np.abs(predicted - anchors_cp) / np.maximum(anchors_cp, 1e-12) * 100, 0.0
+    )
+    return {
+        "model": "piecewise_log_linear",
+        "anchors": [
+            {"viral_load_v": float(v), "copies_per_ml": float(c)}
+            for v, c in DEFAULT_ANCHORS
+        ],
+        "source": "Consensus thresholds: AST IDCOP 2019 (Hirsch & Randhawa, "
+                  "Clin Transplant 33(9):e13528) and Kotton et al. 2024 "
+                  "(Transplantation 108(9):1834-1866). Anchor placement on the "
+                  "model V axis is an assumption, not a fit.",
+        "fit_method": "piecewise log-linear interpolation through anchors (exact by construction)",
+        "fit_quality": {
+            "predicted_values": predicted.tolist(),
+            "actual_values": anchors_cp.tolist(),
+            "percent_error": [float(x) for x in percent_error],
+        },
+        "caveat": "Bridging function for qualitative visualisation; not a "
+                  "patient-calibrated copy-number prediction.",
     }
-    
-    # Verify fit quality
-    predicted = hill_function(vl_values, Vmax_fixed, K_fit, n_fit)
-    fit_quality = {
-        'predicted_values': predicted.tolist(),
-        'actual_values': copies_values.tolist(),
-        'percent_error': np.abs((predicted - copies_values) / copies_values * 100).tolist()
-    }
-    params['fit_quality'] = fit_quality
-    
-    return params
+
+
+def piecewise_loglinear(vl: float, anchors_vl: np.ndarray, anchors_cp: np.ndarray) -> float:
+    """Interpolate log10(copies) linearly between anchors; flat below/above."""
+    vl = max(0.0, float(vl))
+    if vl <= anchors_vl[0]:
+        return float(anchors_cp[0])
+    if vl >= anchors_vl[-1]:
+        # Extrapolate with the last segment's log-slope
+        x0, x1 = anchors_vl[-2], anchors_vl[-1]
+        y0 = np.log10(max(anchors_cp[-2], 1e-12))
+        y1 = np.log10(max(anchors_cp[-1], 1e-12))
+        y = y1 + (vl - x1) * (y1 - y0) / (x1 - x0)
+        return float(10.0 ** y)
+    for i in range(1, len(anchors_vl)):
+        if vl <= anchors_vl[i]:
+            x0, x1 = anchors_vl[i - 1], anchors_vl[i]
+            c0, c1 = anchors_cp[i - 1], anchors_cp[i]
+            if c0 <= 0.0 or c1 <= 0.0:
+                # Linear (not log) interpolation when a segment touches zero
+                frac = (vl - x0) / (x1 - x0)
+                return float(c0 + frac * (c1 - c0))
+            y0, y1 = np.log10(c0), np.log10(c1)
+            frac = (vl - x0) / (x1 - x0)
+            return float(10.0 ** (y0 + frac * (y1 - y0)))
+    return float(anchors_cp[-1])
 
 
 def save_hill_parameters(params: Dict, output_path: str):
-    """Save fitted Hill function parameters to JSON.
-    
-    Args:
-        params: Fitted parameters dictionary
-        output_path: Path to save JSON file
-    """
+    """Save bridge parameters to JSON (function name kept for compatibility)."""
     with open(output_path, 'w') as f:
         json.dump(params, f, indent=2)
+
+
+def fit_hill_parameters():
+    """DEPRECATED: delegating to the exact bridge.
+
+    Kept so legacy callers still work; returns the piecewise bridge record
+    (which contains ``model='piecewise_log_linear'``).
+    """
+    return build_bridge_parameters()
 
 
 class ViralLoadMapper:
@@ -132,42 +150,53 @@ class ViralLoadMapper:
     
     def __init__(self, params_path: Optional[str] = None):
         """Initialize ViralLoadMapper.
-        
+
         Args:
-            params_path: Path to JSON file with Hill parameters. If None,
-                        will attempt to load from default location or fit new parameters.
+            params_path: Path to a JSON bridge-parameter file. If the file is
+                missing (or is an old record without ``model`` ==
+                "piecewise_log_linear"), the default assumption anchors are
+                used and saved.
         """
         if params_path is None:
             params_path = "data/processed/viral_load_mapper_params.json"
-        
-        # Try to load existing parameters
+
+        params = None
         if Path(params_path).exists():
             with open(params_path, 'r') as f:
-                self.params = json.load(f)
-        else:
-            # Fit new parameters
-            print("Fitting Hill function parameters...")
-            self.params = fit_hill_parameters()
-            # Save parameters
-            Path(params_path).parent.mkdir(parents=True, exist_ok=True)
-            save_hill_parameters(self.params, params_path)
-            print(f"Saved parameters to {params_path}")
-        
-        self.Vmax = self.params['Vmax']
-        self.K = self.params['K']
-        self.n = self.params['n']
-    
+                params = json.load(f)
+            if params.get("model") != "piecewise_log_linear":
+                # Stale record from the old (broken) Hill fit — rebuild rather
+                # than silently use parameters that do not reproduce anchors.
+                params = None
+        if params is None:
+            params = build_bridge_parameters()
+            try:
+                Path(params_path).parent.mkdir(parents=True, exist_ok=True)
+                save_hill_parameters(params, params_path)
+            except OSError:
+                pass  # read-only location: still usable with in-memory params
+        self.params = params
+
+        anchors = [(a["viral_load_v"], a["copies_per_ml"]) for a in self.params["anchors"]]
+        self._anchors_vl = np.array([a[0] for a in anchors], dtype=float)
+        self._anchors_cp = np.array([a[1] for a in anchors], dtype=float)
+
+        # Backwards-compatible attributes (old Hill record exposed these)
+        self.Vmax = float(self._anchors_cp[-1])
+        self.K = 0.5
+        self.n = 1.0
+
     def normalized_to_copies(self, viral_load: float) -> float:
-        """Convert simulator viral_load (0-1) to copies/mL.
-        
+        """Convert the ODE model's dimensionless viral load to an indicative
+        copies/mL via the anchored piecewise log-linear bridge.
+
         Args:
-            viral_load: Normalized viral load from simulator (0.0-1.0)
-            
+            viral_load: V from the ODE model (>= 0; may exceed 1.0)
+
         Returns:
-            copies_per_mL: Clinical viral load in copies/mL
+            Indicative plasma viral load in copies/mL (not patient-calibrated).
         """
-        viral_load = max(0.0, min(1.0, viral_load))
-        return hill_function(viral_load, self.Vmax, self.K, self.n)
+        return piecewise_loglinear(viral_load, self._anchors_vl, self._anchors_cp)
     
     def copies_to_risk_category(self, copies_per_ml: float) -> str:
         """Return risk category based on clinical viral load.
@@ -190,139 +219,132 @@ class ViralLoadMapper:
         else:
             return 'severe'
     
+    # Infection is introduced at day 21 (~3 weeks post-transplant), matching
+    # the clinical schedule in which DNAemia is screened from week 2-4 onward.
+    INFECTION_DAY = 21.0
+
     def simulate_clinical_trajectory(
         self,
         scenario: str,
-        weeks: int = 52
+        weeks: int = 52,
+        simulator_config: Optional[Dict] = None,
     ) -> pd.DataFrame:
-        """Run simulation using BKPyVSimulator and return weekly copies/mL trajectory.
-        
-        This method now actually uses the BKPyVSimulator to generate viral load dynamics,
-        then converts the simulator output to clinical copies/mL using the Hill function.
-        This fixes the critical architecture flaw where the mapper used internal trajectory math.
-        
+        """Run the BKPyV ODE model and return a weekly copies/mL trajectory.
+
+        Uses the ODE simulator (days as the time unit) with continuous drug
+        dosing, then converts V to indicative copies/mL via the anchored
+        bridge. This replaces the legacy implementation that simulated in
+        1-hour steps for 52 weeks with the heuristic discrete simulator.
+
         Args:
             scenario: One of 'baseline', 'infection', 'tacrolimus', 'sirolimus'
             weeks: Number of weeks to simulate (default: 52)
-            
+            simulator_config: Optional dict of ODE parameter overrides
+                (e.g. {'p': 12.0}) forwarded to ``BKPyVODESimulator``.
+
         Returns:
-            DataFrame with columns: week, viral_load_norm, copies_per_ml, 
+            DataFrame with columns: week, viral_load_norm, copies_per_ml,
                                  risk_category, drug_scenario
         """
-        # Import simulator components
-        from vcm.plugins.transplant.bk_polyomavirus.bk_polyomavirus import BKPolyomavirusPlugin
-        from vcm.simulators.bkpyv_simulator import BKPyVSimulator
-        from vcm.core.models import CellState, Environment, Perturbation, PerturbationType
-        
-        # Create plugin and simulator
-        plugin = BKPolyomavirusPlugin()
-        initial_state = plugin.create_initial_state()
-        environment = Environment()
-        
-        # Set up simulator config based on scenario
+        from vcm.plugins.transplant.bk_polyomavirus.bk_polyomavirus import (
+            BKPolyomavirusPlugin,
+        )
+        from vcm.simulators.bkpyv_ode_simulator import BKPyVODESimulator
+        from vcm.core.models import Environment, Perturbation, PerturbationType
+
         valid_scenarios = ['baseline', 'infection', 'tacrolimus', 'sirolimus']
         if scenario not in valid_scenarios:
             raise ValueError(f"Invalid scenario: {scenario}. Must be one of {valid_scenarios}")
-        
-        config = {}
-        if scenario == 'tacrolimus':
-            config['tacrolimus_enhancement_factor'] = 1.8
-        elif scenario == 'sirolimus':
-            config['mtor_inhibition_factor'] = 0.5
-        else:
-            config = {}  # Use default for baseline and infection
-        
-        simulator = BKPyVSimulator(config)
-        
-        # Set up perturbations based on scenario
+
+        plugin = BKPolyomavirusPlugin()
+        initial_state = plugin.create_initial_state()
+        environment = Environment()
+        simulator = BKPyVODESimulator(simulator_config or {})
+
         perturbations = []
-        if scenario in ['infection', 'tacrolimus', 'sirolimus']:
-            # Add infection perturbation
+        if scenario in ('infection', 'tacrolimus', 'sirolimus'):
             perturbations.append(Perturbation(
                 id='bkpyv_infection',
                 name='BKPyV infection',
                 perturbation_type=PerturbationType.VIRAL_INFECTION,
                 target_id='viral_entry',
                 magnitude=1.0,
-                timing=504,  # 3 weeks = 504 hours
-                duration=None
+                timing=self.INFECTION_DAY,  # days
+                duration=None,
             ))
-        
-        # Add drug perturbations for drug scenarios
         if scenario == 'tacrolimus':
-            # Tacrolimus: calcineurin inhibitor, starts at transplant (time 0)
             perturbations.append(Perturbation(
                 id='tacrolimus_treatment',
                 name='Tacrolimus treatment',
                 perturbation_type=PerturbationType.DRUG_TREATMENT,
                 target_id='FKBP1A',
                 magnitude=1.0,
-                timing=0.0,  # Start at transplant
-                duration=None
+                timing=0.0,      # from transplant day
+                duration=None,   # continuous dosing
             ))
         elif scenario == 'sirolimus':
-            # Sirolimus: mTOR inhibitor, starts at transplant (time 0)
             perturbations.append(Perturbation(
                 id='sirolimus_treatment',
                 name='Sirolimus treatment',
                 perturbation_type=PerturbationType.DRUG_TREATMENT,
                 target_id='MTOR',
                 magnitude=1.0,
-                timing=0.0,  # Start at transplant
-                duration=None
+                timing=0.0,
+                duration=None,
             ))
-        
-        # Calculate simulation parameters
-        total_hours = weeks * 168  # hours per week
-        n_steps = int(total_hours)  # 1-hour timestep
-        timestep = 1.0
-        
-        # Infection timing: 3 weeks post-transplant = 504 hours
-        # Make sure simulation runs long enough for infection to occur
-        infection_timing = 504
-        if total_hours <= infection_timing:
-            # Extend simulation to at least 1 week after infection
-            total_hours = infection_timing + 168
-            n_steps = int(total_hours)
-        
-        # Run simulation
+
+        total_days = max(int(weeks * 7), int(self.INFECTION_DAY) + 7)
         result = simulator.simulate(
             initial_state=initial_state,
             perturbations=perturbations,
             environment=environment,
-            n_steps=n_steps,
-            timestep=timestep
+            n_steps=total_days,   # 1 day per step
+            timestep=1.0,
         )
-        
-        # Extract viral load from simulation steps
-        viral_loads = []
-        for step in result.steps:
-            viral_load = step.cell_state.viral_load
-            viral_loads.append(viral_load)
-        
-        # Interpolate to weekly resolution
-        weekly_indices = np.linspace(0, len(viral_loads)-1, weeks+1, dtype=int)
-        weekly_viral_loads = [viral_loads[i] for i in weekly_indices]
-        
-        # Convert to clinical copies/mL using Hill function
-        weekly_copies = []
-        for vl in weekly_viral_loads:
-            copies = self.normalized_to_copies(vl)
-            weekly_copies.append(copies)
-        
-        # Build results DataFrame
+
+        daily_loads = [
+            max(0.0, step.cell_state.metadata.get("viral_load", 0.0))
+            for step in result.steps
+        ]
+        daily_days = [step.timestamp for step in result.steps]
+
+        # Weekly sampling (week w -> day 7w)
+        weekly_viral_loads = []
+        for week in range(weeks + 1):
+            target_day = min(7 * week, daily_days[-1])
+            idx = min(range(len(daily_days)), key=lambda i: abs(daily_days[i] - target_day))
+            weekly_viral_loads.append(daily_loads[idx])
+
         results = []
-        for week, (vl_norm, copies) in enumerate(zip(weekly_viral_loads, weekly_copies)):
-            risk_category = self.copies_to_risk_category(copies)
+        for week, vl_norm in enumerate(weekly_viral_loads):
+            copies = self.normalized_to_copies(vl_norm)
             results.append({
                 'week': week,
                 'viral_load_norm': vl_norm,
                 'copies_per_ml': copies,
-                'risk_category': risk_category,
-                'drug_scenario': scenario
+                'risk_category': self.copies_to_risk_category(copies),
+                'drug_scenario': scenario,
             })
-        
+
         return pd.DataFrame(results)
+
+    def simulate_viral_load_trajectory(self, virtual_loads, timepoints, **kwargs):
+        """Convert an existing normalized trajectory for legacy UI callers.
+
+        This compatibility method intentionally preserves the historical
+        dataframe shape while using the mapper's canonical Hill conversion and
+        risk taxonomy.
+        """
+        frame = pd.DataFrame({"week": list(timepoints), "viral_load_norm": list(virtual_loads)})
+        frame["copies_per_ml"] = [
+            self.normalized_to_copies(float(value)) for value in virtual_loads
+        ]
+        frame["plasma_viral_load"] = frame["copies_per_ml"]
+        frame["risk_category"] = [
+            ClinicalThresholds.get_risk_category(float(value))
+            for value in frame["copies_per_ml"]
+        ]
+        return frame
 
 
 def generate_clinical_summary(trajectories: Dict[str, pd.DataFrame]) -> Dict:
@@ -371,3 +393,27 @@ def generate_clinical_summary(trajectories: Dict[str, pd.DataFrame]) -> Dict:
         }
     
     return summary
+
+class ClinicalThresholds:
+    DETECTION_LIMIT = 100
+    SCREENING_POSITIVE = 1_000
+    TREATMENT_POSITIVE = 10_000
+    SEVERE = 1e7
+    # Historical threshold name retained for callers that use the UI plot.
+    HIGH_RISK = TREATMENT_POSITIVE
+
+    @staticmethod
+    def get_risk_category(copies_per_ml: float) -> str:
+        if copies_per_ml < ClinicalThresholds.DETECTION_LIMIT:
+            return "undetectable"
+        if copies_per_ml < ClinicalThresholds.SCREENING_POSITIVE:
+            return "low_risk"
+        if copies_per_ml < ClinicalThresholds.TREATMENT_POSITIVE:
+            return "screening"
+        if copies_per_ml < ClinicalThresholds.SEVERE:
+            return "treatment"
+        return "severe"
+
+
+# Backward-compatible name used by the original Streamlit dashboard.
+ClinicalViralLoadMapper = ViralLoadMapper

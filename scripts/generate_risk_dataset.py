@@ -91,7 +91,7 @@ def run_vcm_simulation_for_patient(covariates, mapper):
     # Approximate using trapezoidal rule
     log_viral_loads = np.log10(df['copies_per_ml'] + 1)  # +1 to avoid log(0)
     weeks = df['week'].values
-    area_under_curve_log = np.trapz(log_viral_loads, weeks)
+    area_under_curve_log = np.trapezoid(log_viral_loads, weeks)
     
     # Time to peak (weeks)
     peak_idx = df['copies_per_ml'].idxmax()
@@ -107,53 +107,45 @@ def run_vcm_simulation_for_patient(covariates, mapper):
 
 
 def generate_outcomes(df):
-    """Generate BKPyVAN outcome using logistic model with literature-based ORs.
-    
-    Risk factors and ORs from Fang et al. 2022 (PMC9428263):
-    - tacrolimus use: OR ~2.3
-    - prior transplant: OR ~2.1
-    - male sex: OR ~1.6
-    - higher peak viral load (log): OR > 1 (to be derived from VCM features)
-    
-    Target prevalence: ~15% BKPyVAN (realistic)
-    
+    """Generate BKPyVAN outcome from CLINICAL COVARIATES ONLY (+ noise).
+
+    Integrity note: previous versions included a +0.5 * log(peak_viral_load)
+    term, i.e. outcomes depended on the VCM features themselves. That made the
+    downstream "does the VCM improve prediction?" comparison circular (the
+    synthetic truth contained the feature being evaluated). The synthetic
+    outcome now depends only on clinical covariates and noise. Any predictive
+    value of VCM features then comes only through their correlation with those
+    covariates - the honest null setup.
+
+    Direction of risk factors is broadly consistent with published systematic
+    reviews (e.g. Demey et al. 2018): tacrolimus, male sex, prior transplant,
+    older age. Exact magnitudes are illustrative, not extracted estimates.
+
     Args:
         df: DataFrame with clinical and VCM features
-        
+
     Returns:
         Series with outcomes (1=BKPyVAN, 0=no BKPyVAN)
     """
     np.random.seed(42)  # For reproducible noise
-    
-    # Logistic model coefficients (log(OR))
-    # Adjust intercept to achieve ~15% prevalence
-    # Current achieved prevalence is 9.8%, need slightly less negative intercept
-    intercept = -6.3  # Adjusted to achieve ~15% prevalence
-    
-    # Coefficients from literature ORs (all positive, as higher value = higher risk)
-    # Sex encoding: 0=female, 1=male → higher sex (male) should increase risk
-    coef_tacrolimus = np.log(2.3)  # OR 2.3
-    coef_prior_transplant = np.log(2.1)  # OR 2.1
-    coef_male = np.log(1.6)  # OR 1.6 for male sex
-    
-    # Clinical features with smaller effects
-    coef_age = 0.01  # Slight increase with age
-    coef_diabetes = np.log(1.3)  # OR ~1.3 for diabetes
-    coef_hla_mismatch = 0.1  # Per additional mismatch
-    
-    # VCM feature coefficient
-    # Higher peak viral load increases risk
-    coef_peak_viral_log = 0.5  # Moderate effect from VCM features
-    
-    # Calculate linear predictor (all coefficients positive → higher value = higher risk)
+
+    # Logistic model coefficients (log-odds scale); magnitudes illustrative
+    intercept = -6.3
+    coef_tacrolimus = np.log(2.3)
+    coef_prior_transplant = np.log(2.1)
+    coef_male = np.log(1.6)
+    coef_age = 0.01
+    coef_diabetes = np.log(1.3)
+    coef_hla_mismatch = 0.1
+
+    # NO VCM-feature term - see docstring (this is the integrity fix).
     X = intercept + \
         coef_age * (df['age'] - 45) / 12 + \
         coef_male * df['sex'] + \
         coef_prior_transplant * df['prior_transplant'] + \
         coef_diabetes * df['diabetes'] + \
         coef_tacrolimus * df['tacrolimus_use'] + \
-        coef_hla_mismatch * (df['hla_mismatch'] - 3.2) / 1.5 + \
-        coef_peak_viral_log * np.log10(df['peak_viral_load_copies'] + 1)
+        coef_hla_mismatch * (df['hla_mismatch'] - 3.2) / 1.5
     
     # Convert to probability
     prob = 1 / (1 + np.exp(-X))
@@ -212,55 +204,53 @@ def main():
     df.to_csv(cohort_path, index=False)
     print(f"Saved cohort data to {cohort_path}")
     
-    # Save generation parameters
+    # Save generation parameters (recorded to match the code exactly)
     params = {
         'n_patients': 500,
         'random_state': 42,
+        'integrity_note': (
+            'Synthetic cohort. Outcomes depend on clinical covariates plus '
+            'noise ONLY - VCM features are NOT in the outcome generator, so '
+            'this cohort can honestly test whether VCM features add value. '
+            'Covariate distributions and ORs are illustrative, broadly '
+            'consistent with Demey et al. 2018 (systematic review). '
+            'Do not treat coefficients as extracted clinical estimates.'
+        ),
         'clinical_covariates': {
-            'age': {'mean': 45, 'std': 12, 'source': 'Fang et al. 2022, PMC9428263'},
-            'sex': {'male_prevalence': 0.60, 'source': 'Fang et al. 2022, PMC9428263'},
-            'prior_transplant': {'prevalence': 0.20, 'source': 'Fang et al. 2022, PMC9428263'},
-            'diabetes': {'prevalence': 0.25, 'source': 'Fang et al. 2022, PMC9428263'},
-            'tacrolimus_use': {'prevalence': 0.75, 'source': 'Fang et al. 2022, PMC9428263'},
-            'hla_mismatch': {'mean': 3.2, 'std': 1.5, 'source': 'Fang et al. 2022, PMC9428263'},
-            'donor_age': {'mean': 42, 'std': 15, 'source': 'Fang et al. 2022, PMC9428263'}
+            'age': {'mean': 45, 'std': 12},
+            'sex': {'male_prevalence': 0.60},
+            'prior_transplant': {'prevalence': 0.20},
+            'diabetes': {'prevalence': 0.25},
+            'tacrolimus_use': {'prevalence': 0.75},
+            'hla_mismatch': {'mean': 3.2, 'std': 1.5},
+            'donor_age': {'mean': 42, 'std': 15}
         },
         'vcm_simulation': {
-            'mapper': 'ViralLoadMapper with bounded Hill function',
+            'mapper': 'ViralLoadMapper with piecewise log-linear anchor bridge (assumption-labelled)',
             'scenario_mapping': {
                 'tacrolimus_use=1': 'tacrolimus scenario',
                 'tacrolimus_use=0': 'sirolimus scenario (proxy)'
             },
             'features_extracted': [
                 'peak_viral_load_copies',
-                'weeks_above_1k', 
+                'weeks_above_1k',
                 'weeks_above_10k',
                 'area_under_curve_log',
                 'time_to_peak_weeks'
             ]
         },
         'outcome_model': {
-            'type': 'logistic regression',
-            'intercept': -7.5,
+            'type': 'logistic probability + Gaussian noise + Bernoulli draw',
+            'intercept': -6.3,
             'coefficients': {
                 'age_standardized': 0.01,
-                'sex': np.log(1.6),  # male=1 increases risk
-                'prior_transplant': np.log(2.1),
-                'diabetes': np.log(1.3),
-                'tacrolimus_use': np.log(2.3),
+                'sex': float(np.log(1.6)),
+                'prior_transplant': float(np.log(2.1)),
+                'diabetes': float(np.log(1.3)),
+                'tacrolimus_use': float(np.log(2.3)),
                 'hla_mismatch_standardized': 0.1,
-                'peak_viral_load_copies_log': 0.5
             },
-            'source_or_values': {
-                'tacrolimus_use': {'OR': 2.3, 'source': 'Fang et al. 2022, PMC9428263'},
-                'prior_transplant': {'OR': 2.1, 'source': 'Fang et al. 2022, PMC9428263'},
-                'sex': {'OR': 1.6, 'source': 'Fang et al. 2022, PMC9428263'},
-                'diabetes': {'OR': 1.3, 'source': 'Fang et al. 2022, PMC9428263'},
-                'peak_viral_load_copies_log': {'OR': 'derived from VCM features', 'note': 'Higher peak increases risk'},
-                'age_standardized': {'note': 'Standardized age, slight risk increase'},
-                'hla_mismatch_standardized': {'note': 'Standardized HLA mismatch, slight risk increase'}
-            },
-            'target_prevalence': 0.15,
+            'vcm_feature_coefficient': 0.0,
             'achieved_prevalence': float(prevalence)
         }
     }

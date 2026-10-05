@@ -278,8 +278,9 @@ def test_bkpyv_host_dna_synthesis():
 
     simulator = BKPyVSimulator()
 
-    # Initially DNA synthesis should be active
-    assert state.metadata["host_dna_synthesis"] == "active"
+    # The reviewer-informed baseline is terminally differentiated/G0-G1;
+    # S-phase permissiveness is an explicit gate, not an assumed baseline.
+    assert state.metadata["host_dna_synthesis"] == "inactive"
 
     # Apply DNA damage to suppress synthesis
     damage = Perturbation(
@@ -466,11 +467,15 @@ def test_bkpyv_cell_schema():
 
 
 def test_bkpyv_default_config():
-    """Test BKPyV default configuration."""
+    """Test BKPyV default configuration.
+
+    The ODE simulator is the canonical engine; the discrete simulator
+    ("bkpyv_specific", hourly heuristic rules) is retained for legacy configs.
+    """
     plugin = BKPolyomavirusPlugin()
     config = plugin.get_default_config()
 
     assert config.plugin == "transplant.bk_polyomavirus"
-    assert config.simulator == "bkpyv_specific"
+    assert config.simulator == "bkpyv_ode"
     assert config.simulation_length == 100.0
     assert config.output_path == "outputs/bkpyv/"

@@ -1,6 +1,6 @@
-# Heavy data files
-data/
-data/**/*
+# Heavy data files (root-anchored so it cannot swallow e.g. src/vcm/data/)
+/data/
+/data/**/*
 *.tar
 *.tar.gz
 *.gz
@@ -17,9 +17,12 @@ data/**/*
 .claude/
 .claude/**/*
 
-# Output files
-outputs/
-outputs/**/*
+# Output files (root-anchored - same reason as /data/)
+/outputs/
+/outputs/**/*
+
+# Notebook run artifacts dropped beside notebooks
+/notebooks/data/
 
 # Cache and temporary files
 .pytest_cache/
@@ -34,8 +37,8 @@ __pycache__/
 *.docx
 *.tif
 *.tiff
-data/research/
-data/research/**/*
+/data/research/
+/data/research/**/*
 
 # Jupyter notebook checkpoints
 .ipynb_checkpoints/

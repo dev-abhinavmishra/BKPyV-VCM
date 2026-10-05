@@ -100,37 +100,99 @@ class TestBKPyVODESystem:
         assert sol.y.shape[0] == 15  # 15 state variables
 
     def test_viral_clearance_kinetics(self):
-        """Test that viral clearance matches expected half-lives from research."""
+        """Viral load must decay when production is switched off.
+
+        Isolates the clearance term: with production disabled (p=0) and no new
+        infections, V should decline monotonically at roughly the rate implied
+        by delta (half-life ln(2)/delta, modulo antiviral-state enhancement).
+        """
         ode_system = BKPyVODESystem()
         ode_system.params['delta'] = 0.5  # ~1.4 day half-life
+        ode_system.params['p'] = 0.0  # switch off virion production
+        ode_system.params['beta'] = 0.0  # no new infections
         y0 = ode_system.get_infection_conditions()
+        y0[4] = 0.0  # no infected-cell reservoir producing virus
 
         def ode_func(t, y):
             return ode_system.ode_system(t, y)
 
-        sol = solve_ivp(ode_func, (0, 10), y0, method='LSODA')
+        sol = solve_ivp(ode_func, (0, 10), y0, t_eval=np.arange(0.0, 10.5, 0.5),
+                        method='LSODA')
 
-        # Viral load should decrease over time (no production in this simple test)
         initial_viral = y0[0]
         final_viral = sol.y[0, -1]
         assert final_viral < initial_viral
+        # Monotone decrease (allowing tiny solver jitter)
+        diffs = np.diff(sol.y[0])
+        assert (diffs <= 1e-6).all()
+        # Half-life should be at least as fast as delta alone implies and not
+        # absurdly faster than delta + antiviral enhancement allows
+        import math
+        observed_half_lives = []
+        for i in range(1, len(sol.t)):
+            v = sol.y[0, i]
+            if 0.0 < v < initial_viral / 2.0:
+                observed_half_lives.append(sol.t[i])
+                break
+        assert observed_half_lives, "viral load never dropped below half the inoculum"
+        expected_min = math.log(2) / (0.5 * 3.0)  # delta * (1 + ak_max_enhancement)
+        expected_max = math.log(2) / 0.5 * 4  # generous bound (sanity)
+        assert expected_min <= observed_half_lives[0] <= expected_max
+
+    def test_infection_persists_with_default_parameters(self):
+        """With default (baseline) parameters, infection must not self-clear.
+
+        Regression test: a previous parameterisation always extinguished the
+        infection (peak == inoculum), making every dose/response scenario a
+        decay curve. BKPyV can persist under ongoing replication, so the
+        default regime must sustain a non-zero plateau.
+        """
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+
+        def ode_func(t, y):
+            return ode_system.ode_system(t, y)
+
+        sol = solve_ivp(ode_func, (0, 60), y0, t_eval=np.arange(0, 61, 1.0),
+                        method='LSODA')
+        V = sol.y[0]
+        assert V.max() > 0.5, "infection never amplified beyond the inoculum"
+        assert V[-1] > 0.05, "infection always self-clears to zero"
 
     def test_drug_effect_consistency(self):
-        """Test that drug effects are consistent with research expectations."""
+        """Drug knobs must act through their documented mechanisms.
+
+        - Tacrolimus (D_tac) acts ONLY on immune control: it must reduce the
+          infected-cell killing pressure (dI/dt less negative / more positive)
+          and must not appear in the intracellular replication flux.
+        - Sirolimus (D_sir) acts on production permissiveness: with enough
+          present, dV/dt from production is lower than without.
+        """
         ode_system = BKPyVODESystem()
-        y0_tac = ode_system.get_infection_conditions()
-        y0_sir = ode_system.get_infection_conditions().copy()
 
-        # Add drugs
-        y0_tac[11] = 1.0  # Tacrolimus
-        y0_sir[12] = 1.0  # Sirolimus
+        # --- Tacrolimus: identical state ± drug ------------------------------
+        y_no_drug = ode_system.get_infection_conditions()
+        y_tac = y_no_drug.copy()
+        y_tac[11] = 1.0  # Tacrolimus present
 
-        dydt_tac = ode_system.ode_system(0.0, y0_tac)
-        dydt_sir = ode_system.ode_system(0.0, y0_sir)
+        d_no_drug = ode_system.ode_system(10.0, y_no_drug)
+        d_tac = ode_system.ode_system(10.0, y_tac)
 
-        # Tacrolimus should enhance viral replication
-        # Sirolimus should suppress viral replication
-        # (This is a simplified test - actual comparison requires full simulation)
+        # Tacrolimus must not change dT/dt (no direct genome-copy enhancement)
+        assert d_tac[1] == pytest.approx(d_no_drug[1])
+        # It must change infected-cell loss (dI/dt index 4) in favour of the virus
+        assert d_tac[4] > d_no_drug[4]
+
+        # --- Sirolimus: suppresses production --------------------------------
+        # get_infection_conditions() sets T=0.3, below the 0.5 threshold, so
+        # the mTOR early-phase effect is fully active in both copies.
+        y_ref = y_no_drug.copy()
+        y_sir = y_ref.copy()
+        y_sir[12] = 1.0  # Sirolimus present
+        d_sir = ode_system.ode_system(10.0, y_sir)
+        d_ref = ode_system.ode_system(10.0, y_ref)
+        assert d_sir[0] < d_ref[0]  # viral production reduced
+
 
 
 class TestBKPyVODESimulator:

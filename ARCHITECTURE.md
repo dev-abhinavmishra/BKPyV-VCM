@@ -1,5 +1,9 @@
 # VCM Architecture Overview
 
+> This document describes the platform architecture. For the current BKPyV
+> implementation status, runnable commands, and reviewer outputs, see
+> [README.md](README.md).
+
 ## Design Philosophy
 
 The Virtual Cell Model (VCM) is designed with the following principles:
@@ -214,9 +218,9 @@ The Virtual Cell Model (VCM) is designed with the following principles:
 ## Performance Considerations
 
 ### Current State
-- v1 focuses on correctness over performance
-- Simple update rules (no complex ODE solving)
-- In-memory state representation
+- The BKPyV path includes both the pathway simulator and a reviewable adaptive ODE engine
+- The reviewer bundle records solver tolerances and generates source tables beside figures
+- Simulations remain in-memory unless an export path is explicitly requested
 
 ### Future Optimizations
 - Lazy loading of large datasets
@@ -254,6 +258,26 @@ The Virtual Cell Model (VCM) is designed with the following principles:
 - Example configs for each plugin
 - Jupyter notebooks demonstrating workflows
 - Tutorial scripts for common tasks
+
+## Post-audit invariants (2026-09)
+
+The following invariants are enforced by tests and must hold in any change:
+
+1. **`bkpyv_ode` is registered** in `ExperimentRunner.simulator_registry` and
+   is the canonical BKPyV dynamics engine. The discrete `bkpyv_specific`
+   simulator is retained for backward compatibility only.
+2. **Time units are explicit.** ODE rate constants are per **day**; configs
+   declare `time_unit:` (days for ODE, hours for the legacy discrete engine).
+   The continuous drug dosing uses `timing`/`duration` in the config's unit.
+3. **Config parameters actually reach simulators.** `simulator_parameters:`
+   (and the legacy alias `simulator_params:`) are merged and passed to the
+   simulator constructor; YAML `1e-6`-style floats must be written as `1.0e-6`
+   (PyYAML parses the former as strings; the simulator also coerces).
+4. **No free-floating success banners.** Scripts under repo root
+   (`validate_*.py`) exit nonzero on failure and never print unconditional
+   success text.
+5. **The copies/mL bridge is assumption-labelled.** All clinical-facing
+   outputs carry explicit caveat text.
 
 ## Error Handling
 

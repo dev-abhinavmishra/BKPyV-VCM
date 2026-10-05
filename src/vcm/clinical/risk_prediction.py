@@ -14,14 +14,15 @@ Model Types:
 2. Enhanced Model: Clinical + Virtual Cell features
 3. Comparison framework for model evaluation
 
-Key Clinical Covariates (from extracted data):
-- Age (OR 1.75-1.99 for >50 years)
-- Sex (OR 2.22-2.42 for male)
-- Prior transplant (OR 2.79-3.28)
-- HLA mismatch (OR 1.30 for 4-6 mismatch)
+Key Clinical Covariates (directions grounded in Demey et al., J Clin Virol
+2018, systematic review; exact ORs in code are illustrative):
+- Age (higher risk above ~50 years)
+- Sex (male)
+- Prior transplant
+- HLA mismatch
 - Diabetes status
-- Tacrolimus use (OR 2.0-2.3)
-- GcfDNA levels (delta GcfDNA AUC 0.83)
+- Tacrolimus use
+- GcfDNA levels (exploratory; not part of the default feature set)
 
 Virtual Cell Features:
 - Simulated peak viral load
@@ -32,13 +33,15 @@ Virtual Cell Features:
 - Drug effectiveness metrics
 """
 
-import numpy as np
-import pandas as pd
-from typing import Dict, List, Tuple, Optional, Union
+import json
+import math
+import pickle
 from dataclasses import dataclass
 from pathlib import Path
-import pickle
-import json
+from typing import Dict, List, Optional, Tuple, Union
+
+import numpy as np
+import pandas as pd
 
 # sklearn imports for risk prediction
 from sklearn.linear_model import LogisticRegression
@@ -57,8 +60,11 @@ class RiskPredictor:
     
     Reference:
     - Yamauchi et al. 2025, Renal Failure: BKPyVAN risk prediction with
-      integer-based risk score using age, sex, prior transplant (AUC ~0.68)
-    - Fang et al. 2022, PMC9428263: Clinical risk factors with ORs
+      integer-based risk score using age, sex, prior transplant (CV AUC ~0.65)
+    - Risk-factor directions broadly consistent with Demey et al., J Clin
+      Virol 2018 systematic review. (Earlier drafts cited "Fang et al. 2022,
+      PMC9428263" for specific ORs; that paper is a single-center dynamic-
+      prediction study and does not contain those ORs.)
     """
     
     def __init__(self, random_state=42):
@@ -103,10 +109,9 @@ class RiskPredictor:
         
         # Log-transform peak viral load if present (for consistency)
         # But for clinical baseline, we only use clinical features
-        
-        # Initialize model with L2 regularization
+
+        # Initialize model with L2 regularization (lbfgs default)
         model = LogisticRegression(
-            penalty='l2',
             C=1.0,
             random_state=self.random_state,
             max_iter=1000
@@ -175,9 +180,8 @@ class RiskPredictor:
         all_features = self.clinical_features + [f + '_log' if f == 'peak_viral_load_copies' else f 
                                                   for f in self.vcm_features]
         
-        # Initialize model with L2 regularization
+        # Initialize model with L2 regularization (lbfgs default)
         model = LogisticRegression(
-            penalty='l2',
             C=1.0,
             random_state=self.random_state,
             max_iter=1000
@@ -981,7 +985,7 @@ def extract_virtual_cell_features_from_simulation(
     time_to_first_viremia = timepoints[first_viremia_idx]
     
     # AUC calculation
-    viral_load_auc = np.trapz(viral_loads, timepoints)
+    viral_load_auc = np.trapezoid(viral_loads, timepoints)
     
     # Clearance rate (simple exponential decay from peak)
     if peak_idx < len(viral_loads) - 1:

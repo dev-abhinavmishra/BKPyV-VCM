@@ -1,20 +1,20 @@
 """Experiment runner for managing simulation experiments."""
 
-import copy
-from datetime import datetime
+import inspect
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import yaml
 
 from vcm.core.models import CellState, ExperimentConfig, SimulationResult
 from vcm.data.loader import DataLoader
 from vcm.plugins.base import PluginRegistry
-from vcm.simulators.base import BaseSimulator
 from vcm.simulators.hybrid import HybridSimulator
 from vcm.simulators.mechanistic import MechanisticSimulator
 from vcm.simulators.ml_based import MLBasedSimulator
 from vcm.simulators.bkpyv_simulator import BKPyVSimulator
+from vcm.simulators.bkpyv_ode_simulator import BKPyVODESimulator
 
 
 class ExperimentRunner:
@@ -32,6 +32,7 @@ class ExperimentRunner:
             "ml_based": MLBasedSimulator,
             "hybrid": HybridSimulator,
             "bkpyv_specific": BKPyVSimulator,
+            "bkpyv_ode": BKPyVODESimulator,
         }
 
     def run_experiment(
@@ -53,33 +54,52 @@ class ExperimentRunner:
         if plugin is None:
             raise ValueError(f"Plugin '{config.plugin}' not found")
 
-        # Get initial state
+        # Get initial state; pass simulator_parameters so state-level knobs
+        # (e.g., BKPyV nccr_variant) flow from the config into the initial state.
         if initial_state is None:
-            initial_state = plugin.create_initial_state()
+            initial_state = plugin.create_initial_state(config.simulator_parameters or None)
 
         # Get simulator
         simulator_class = self.simulator_registry.get(config.simulator)
         if simulator_class is None:
             raise ValueError(f"Simulator '{config.simulator}' not found")
 
-        simulator = simulator_class(config.metadata)
+        # Simulator receives the declared simulator_parameters (plus plugin
+        # kwargs such as nccr_variant), never the human-facing metadata.
+        simulator_config = dict(config.simulator_parameters)
+        if initial_state is not None:
+            nccr_variant = initial_state.metadata.get("nccr_variant")
+            if nccr_variant and "nccr_variant" not in simulator_config:
+                simulator_config["nccr_variant"] = nccr_variant
+        simulator = simulator_class(simulator_config)
 
         # Calculate number of steps
         n_steps = int(config.simulation_length / config.timestep)
 
-        # Apply perturbations (simplified - just use first one for now)
-        perturbation = config.perturbations[0] if config.perturbations else None
+        # Pass the full perturbation list to simulators that support it;
+        # older simulators only accept a single perturbation.
+        simulate_params = inspect.signature(simulator.simulate).parameters
+        if "perturbations" in simulate_params:
+            result = simulator.simulate(
+                initial_state=initial_state,
+                perturbations=list(config.perturbations),
+                environment=config.environment,
+                n_steps=n_steps,
+                timestep=config.timestep,
+            )
+        else:
+            perturbation_sequence = config.perturbations or [None]
+            for perturbation in perturbation_sequence:
+                result = simulator.simulate(
+                    initial_state=initial_state,
+                    perturbation=perturbation,
+                    environment=config.environment,
+                    n_steps=n_steps,
+                    timestep=config.timestep,
+                )
+                initial_state = result.final_state or initial_state
 
-        # Run simulation
-        result = simulator.simulate(
-            initial_state=initial_state,
-            perturbation=perturbation,
-            environment=config.environment,
-            n_steps=n_steps,
-            timestep=config.timestep,
-        )
-
-        result.end_time = datetime.utcnow()
+        result.end_time = datetime.now(timezone.utc)
         result.config_id = config.experiment_id
 
         return result

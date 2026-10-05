@@ -6,6 +6,8 @@ plugin: transplant.bk_polyomavirus
 simulator: bkpyv_specific
 simulation_length: 100.0
 timestep: 1.0
+# Legacy discrete simulator: one timestep is one hour.
+time_unit: hours
 output_path: outputs/bkpyv/tacrolimus/
 save_interval: 1
 seed: 42
@@ -47,7 +49,7 @@ perturbations:
 # Simulator parameters with tacrolimus-specific research grounding
 simulator_parameters:
   # Drug effect parameters (tacrolimus at maximum clinical effect)
-  tacrolimus_enhancement_factor: 2.3  # Updated to clinical OR 2.0-2.3
+  tacrolimus_enhancement_factor: 2.3  # literature OR ~2.3 (Fang 2022, PMC9428263)
   sirolimus_inhibition_factor: 0.5
   everolimus_inhibition_factor: 0.5
   drug_effectiveness_window: 24.0

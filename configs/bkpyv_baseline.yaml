@@ -5,6 +5,8 @@ plugin: transplant.bk_polyomavirus
 simulator: bkpyv_specific
 simulation_length: 100.0
 timestep: 1.0
+# Legacy discrete simulator: one timestep is one hour.
+time_unit: hours
 output_path: outputs/bkpyv/baseline/
 save_interval: 1
 seed: 42
@@ -25,11 +27,11 @@ perturbations: []
 # Source: docs/bkpyv_research_to_model_map.md
 simulator_parameters:
   # Drug effect parameters (HIGH confidence)
-  tacrolimus_enhancement_factor: 2.0  # Updated to clinical OR 2.0-2.3
-  sirolimus_inhibition_factor: 0.5  # IC90 = 4 ng/mL (90% inhibition)
+  tacrolimus_enhancement_factor: 2.0  # literature OR ~2.3 (Fang 2022, PMC9428263)
+  sirolimus_inhibition_factor: 0.5  # in-vitro IC90 ~4 ng/mL (Hirsch 2016)
   everolimus_inhibition_factor: 0.5  # Analogous to sirolimus
   drug_effectiveness_window: 24.0  # Early phase window (hours)
-  late_phase_drug_resistance: 0.3  # Sirolimus reduced to 30% in late phase
+  late_phase_drug_resistance: 0.3  # reduced late-phase effectiveness (graded window)
   
   # Viral replication parameters (MEDIUM confidence)
   t_antigen_replication_threshold: 0.5  # T antigen requirement

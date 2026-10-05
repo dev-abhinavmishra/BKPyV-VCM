@@ -1,20 +1,20 @@
 """BKPyV-specific simulator with pathway-driven replication and drug effects.
 
-This simulator implements key mechanistic insights from single-cell studies of BKPyV:
+.. deprecated::
+    Superseded by :class:`BKPyVODESimulator` (continuous-time ODE, day units).
+    This discrete (1 hour per step) heuristic simulator is kept for backward
+    compatibility with older configs and tests, but new analyses should use
+    the ODE engine. Known conceptual differences vs. the ODE engine:
+    tacrolimus here multiplies the replication rate directly (the ODE routes
+    it through immune control), and T antigen here *drives* cell-cycle entry
+    (the ODE gates T-antigen accumulation on prior S phase, per Needham 2024).
+
+Mechanistic intent (all phenomenological):
 - Viral replication depends on host DNA synthesis status and T antigen expression
 - Cell cycle phase influences viral replication efficiency
-- Tacrolimus enhances viral replication via calcineurin inhibition (AJT-16-821.pdf)
-- mTOR inhibitors (sirolimus) suppress viral replication via mTOR inhibition (AJT-16-821.pdf)
-- Host pathway activities (DNA damage response, innate immunity) modulate infection outcome
-- Research-based parameters from AJT-16-821.pdf and single-cell transcriptomic studies
-- Timing-dependent drug effects (sirolimus effective only in early phase: 0-24h)
-- Mitochondrial stress signature emerges in late replication phase
-- Antigen presentation suppression as immune evasion mechanism
-
-Research Grounding:
-- Drug mechanisms: AJT-16-821.pdf (tacrolimus activates via FKBP-12, sirolimus inhibits via mTOR)
-- Clinical ORs: Tacrolimus OR 2.0-2.3 vs belatacept (irnf_a_2509785_sm5943.docx)
-- Single-cell pathways: jvi.01382-24-s0003.pdf, jvi.01382-24-s0004.pdf
+- In vitro: tacrolimus increases, sirolimus decreases BKPyV replication
+  (Hirsch et al., Am J Transplant 2016;16(3):821-832)
+- Single-cell pathway patterns from Weissbach et al., J Virol 2024;98(12):e01382-24
 """
 
 import copy
@@ -44,7 +44,7 @@ class BKPyVSimulator(BaseSimulator):
         - Sirolimus inhibits BKPyV replication via mTOR inhibition (IC90 = 4 ng/mL, factor: 0.5)
         - Critical window: 0-24h post-infection for drug effectiveness during early gene expression
 
-        Parameters based on single-cell transcriptomic data (jvi.01382-24-s0003.pdf, jvi.01382-24-s0004.pdf):
+        Parameters based on single-cell transcriptomic data (Weissbach et al., J Virol 2024;98(12):e01382-24 (supplementary pathway analyses)):
         - Translation pathways highly elevated in infection (factor: 2.0)
         - Mitochondrial function upregulated (importance: 0.8)
         - Protein degradation pathways involved (inhibition: 0.3)
@@ -82,7 +82,7 @@ class BKPyVSimulator(BaseSimulator):
             config.get("dna_damage_response_enhancement", 1.3) if config else 1.3
         )
 
-        # Single-cell pathway-validated parameters (from jvi.01382-24-s0003.pdf, jvi.01382-24-s0004.pdf)
+        # Single-cell pathway-validated parameters (from Weissbach et al., J Virol 2024;98(12):e01382-24 (supplementary pathway analyses))
         self.translation_enhancement_factor = config.get("translation_enhancement_factor", 2.0) if config else 2.0
         self.mitochondrial_function_importance = config.get("mitochondrial_function_importance", 0.8) if config else 0.8
         self.protein_degradation_inhibition = config.get("protein_degradation_inhibition", 0.3) if config else 0.3
@@ -435,7 +435,7 @@ class BKPyVSimulator(BaseSimulator):
 
         # Combined replication rate with research-grounded pathway effects
         # NEW: Mitochondrial stress effect (emerges mainly in late replication)
-        # Source: jvi.01382-24-s0004.pdf - mitochondrial genes upregulated in late infection
+        # Source: Weissbach et al. 2024 (suppl.) - mitochondrial genes upregulated in late infection
         mitochondrial_stress = state.metadata.get("mitochondrial_stress", 0.0)
         mitochondrial_factor = 1.0 + mitochondrial_stress * 0.5  # Stress may enhance late replication
         
@@ -646,7 +646,7 @@ class BKPyVSimulator(BaseSimulator):
             pathway_activities["apoptosis"] = min(1.0, apoptosis_ratio * 0.5)
 
         # Update mitochondrial stress pathway (emerges in late infection)
-        # Source: jvi.01382-24-s0004.pdf - MT-ND4, MT-CO1, MT-CYB upregulated in late BKPyV
+        # Source: Weissbach et al. 2024 (suppl.) - MT-ND4, MT-CO1, MT-CYB upregulated in late BKPyV
         mitochondrial_genes = ["MT-ND4", "MT-CO1", "MT-CYB"]
         if all(gene in state.genes for gene in mitochondrial_genes):
             mt_expression = sum(state.genes[gene].expression_level for gene in mitochondrial_genes) / 3.0
@@ -718,7 +718,7 @@ class BKPyVSimulator(BaseSimulator):
                 state.metadata["viral_replication_phase"] = "late"
 
         # NEW: Update mitochondrial stress (increases in late replication)
-        # Source: jvi.01382-24-s0004.pdf - discordant mt vs nuclear expression in late infection
+        # Source: Weissbach et al. 2024 (suppl.) - discordant mt vs nuclear expression in late infection
         if state.metadata["viral_replication_phase"] == "late":
             mitochondrial_activity = pathway_activities.get("mitochondrial_stress", 0.0)
             # Stress increases as replication progresses in late phase

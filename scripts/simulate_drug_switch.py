@@ -2,17 +2,21 @@
 """
 Drug switching simulation for BKPyV VCM project.
 
-Simulates the clinically recommended intervention:
-- Patient starts on tacrolimus → develops viremia → switches to sirolimus
-at treatment threshold (10,000 copies/mL) or screening threshold (1,000 copies/mL).
+Simulates the clinically motivated scenario:
+- Patient starts on tacrolimus -> develops viremia -> switches to sirolimus
+at the screening threshold (1,000 copies/mL) or treatment threshold
+(10,000 copies/mL) weeks.
 
-Compares three intervention strategies:
-A) No intervention (tacrolimus only, 52 weeks)
-B) Switch to sirolimus at week 8 (when treatment threshold crossed)
-C) Switch to sirolimus at week 4 (early intervention, screening threshold)
+A switch is modelled as a SINGLE continuous ODE trajectory: tacrolimus dosing
+from day 0 to the switch day, sirolimus dosing from the switch day onward.
+(The previous implementation spliced two independent simulations, which
+restarted the infection clock and is replaced here.)
 """
 
-import numpy as np
+import matplotlib
+
+matplotlib.use("Agg")
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import sys
@@ -22,40 +26,83 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from vcm.clinical.viral_load_mapper import ViralLoadMapper
+from vcm.core.models import Perturbation, PerturbationType
+from vcm.plugins.transplant.bk_polyomavirus import BKPolyomavirusPlugin
+from vcm.simulators.bkpyv_ode_simulator import BKPyVODESimulator
 
 
-def simulate_drug_switch(switch_week=None):
-    """Simulate viral load trajectory with drug switch at specified week.
-    
+def simulate_drug_switch(switch_week=None, weeks: int = 52):
+    """Run one continuous ODE trajectory with a tac->sir switch at `switch_week`.
+
     Args:
-        switch_week: Week to switch from tacrolimus to sirolimus (None = no switch)
-        
+        switch_week: Week at which tacrolimus stops and sirolimus starts
+            (None = tacrolimus throughout).
+        weeks: Horizon in weeks.
+
     Returns:
-        DataFrame with viral load trajectory
+        DataFrame with weekly columns: week, viral_load_norm, copies_per_ml.
     """
     mapper = ViralLoadMapper()
-    
-    if switch_week is None:
-        # No switch - tacrolimus throughout
-        df = mapper.simulate_clinical_trajectory('tacrolimus', weeks=52)
-        df['intervention'] = 'No switch'
-    else:
-        # Switch at specified week
-        # Tacrolimus for first switch_week weeks
-        df_tac = mapper.simulate_clinical_trajectory('tacrolimus', weeks=switch_week)
-        
-        # Sirolimus for remaining weeks
-        df_sir = mapper.simulate_clinical_trajectory('sirolimus', weeks=52-switch_week)
-        
-        # Shift sirolimus data to continue from week switch_week
-        df_sir['week'] = df_sir['week'] + switch_week
-        
-        # Concatenate
-        df = pd.concat([df_tac, df_sir], ignore_index=True)
-        df = df.sort_values('week').reset_index(drop=True)
-        df['intervention'] = f'Switch at week {switch_week}'
-    
-    return df
+    total_days = weeks * 7
+    infection_day = ViralLoadMapper.INFECTION_DAY
+
+    perturbations = [
+        Perturbation(
+            id="bkpyv_infection",
+            name="BKPyV infection",
+            perturbation_type=PerturbationType.VIRAL_INFECTION,
+            target_id="viral_entry",
+            magnitude=1.0,
+            timing=infection_day,
+        ),
+        Perturbation(
+            id="tacrolimus_baseline",
+            name="Tacrolimus (baseline immunosuppression)",
+            perturbation_type=PerturbationType.DRUG_TREATMENT,
+            target_id="FKBP1A",
+            magnitude=1.0,
+            timing=0.0,
+            duration=(None if switch_week is None else switch_week * 7.0),
+        ),
+    ]
+    if switch_week is not None:
+        perturbations.append(Perturbation(
+            id="sirolimus_switch",
+            name="Sirolimus after switch",
+            perturbation_type=PerturbationType.DRUG_TREATMENT,
+            target_id="MTOR",
+            magnitude=1.0,
+            timing=float(switch_week * 7),
+            duration=None,
+        ))
+
+    plugin = BKPolyomavirusPlugin()
+    sim = BKPyVODESimulator({})
+    result = sim.simulate(
+        initial_state=plugin.create_initial_state(),
+        perturbations=perturbations,
+        n_steps=total_days,
+        timestep=1.0,
+    )
+
+    daily = pd.DataFrame(
+        {
+            "day": [s.timestamp for s in result.steps],
+            "viral_load_norm": [
+                max(0.0, s.cell_state.metadata.get("viral_load", 0.0)) for s in result.steps
+            ],
+        }
+    )
+    weekly = daily.groupby((daily["day"] // 7).astype(int)).last().reset_index(drop=True)
+    weekly.insert(0, "week", weekly.index)
+    weekly = weekly[weekly["week"] <= weeks].reset_index(drop=True)
+    weekly["copies_per_ml"] = weekly["viral_load_norm"].apply(mapper.normalized_to_copies)
+    weekly["risk_category"] = weekly["copies_per_ml"].apply(mapper.copies_to_risk_category)
+    weekly["drug_scenario"] = "no_switch" if switch_week is None else f"switch_week_{switch_week}"
+    weekly["intervention"] = (
+        "No switch" if switch_week is None else f"Switch at week {switch_week}"
+    )
+    return weekly
 
 
 def main():
@@ -154,9 +201,10 @@ def main():
     print(f"  {'Switch at week 4':<30} {df_switch_week4['copies_per_ml'].max():>15,.0f} {df_switch_week4['copies_per_ml'].iloc[-1]:>15,.0f}")
     print()
     
-    # Calculate reduction vs no switch
-    reduction_week8 = (df_no_switch['copies_per_ml'].iloc[-1] - df_switch_week8['copies_per_ml'].iloc[-1]) / df_no_switch['copies_per_ml'].iloc[-1] * 100
-    reduction_week4 = (df_no_switch['copies_per_ml'].iloc[-1] - df_switch_week4['copies_per_ml'].iloc[-1]) / df_no_switch['copies_per_ml'].iloc[-1] * 100
+    # Calculate reduction vs no switch (guard against a zero denominator)
+    denom = max(float(df_no_switch['copies_per_ml'].iloc[-1]), 1e-9)
+    reduction_week8 = (df_no_switch['copies_per_ml'].iloc[-1] - df_switch_week8['copies_per_ml'].iloc[-1]) / denom * 100
+    reduction_week4 = (df_no_switch['copies_per_ml'].iloc[-1] - df_switch_week4['copies_per_ml'].iloc[-1]) / denom * 100
     
     print("Viral load reduction at week 52 vs no switch:")
     print(f"  Switch at week 8: {reduction_week8:.1f}% reduction")
@@ -183,7 +231,11 @@ def main():
             'screening_threshold': 1000,
             'treatment_threshold': 10000
         },
-        'interpretation': "Early intervention (switch at week 4) provides greatest viral load reduction compared to delayed intervention (switch at week 8). This supports clinical guidelines for early screening and intervention."
+        'interpretation': (
+            "Model-internal prediction only: switching earlier reduces simulated "
+            "viral burden under this model's assumptions (assumption-labelled "
+            "bridge, immune-control formulation). Not a clinical recommendation."
+        )
     }
     
     import json

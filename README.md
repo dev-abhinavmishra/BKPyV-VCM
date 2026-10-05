@@ -1,4 +1,4 @@
-# Virtual Cell Model (VCM)
+﻿# Virtual Cell Model (VCM)
 
 A modular, extensible platform for cellular simulation designed for ISEF research projects. VCM provides a framework for mechanistic and ML-based cell modeling, with support for various biological systems including minimal bacterial cells, virus-host interactions, immune cells, and cancer cells.
 
@@ -13,6 +13,19 @@ The Virtual Cell Model (VCM) is a Python-based computational biology platform th
 - Build reproducible experiments with configurable parameters
 
 VCM is designed as a foundation for computational biology research, particularly suitable for high-school science fair projects (ISEF) that require a technically rigorous, extensible codebase.
+
+### BKPyV research mode
+
+The BKPyV model includes an evidence-aware renal-cell mode shaped by primary-cell single-cell biology:
+
+- host S phase/DNA synthesis gates large T-antigen accumulation (Needham et al., PLoS Pathog 2024);
+- intracellular replication flux is kept separate from system-level viral production;
+- tacrolimus is modeled as reduced immune control, not direct genome-copying enhancement (mechanism motif from Hirsch et al., AJT 2016, in vitro);
+- archetype and rearranged NCCR scenarios expose a testable early-gene/capsid trade-off.
+
+These are mechanistic hypotheses and visualization outputs, not patient-specific clinical predictions. See [the BKPyV model card](docs/BKPYV_MODEL_CARD.md) for interpretation boundaries and proposed experiments.
+
+**Time units**: the ODE simulator (`bkpyv_ode`) uses **days** with per-day rate constants. The legacy discrete simulator (`bkpyv_specific`) uses **hours** per step and is superseded for analysis. `configs/*.yaml` declare `time_unit` explicitly.
 
 ## Features
 
@@ -54,6 +67,8 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 3. Install dependencies:
 ```bash
 pip install -e .
+# optional: dashboard UI
+pip install -e ".[ui]"
 # or with uv
 uv pip install -e .
 ```
@@ -188,40 +203,35 @@ virtual-cell-model/
 ├── README.md
 ├── pyproject.toml
 ├── requirements.txt
-├── configs/                    # Experiment configurations
-│   ├── minimal_cell_baseline.yaml
-│   ├── minimal_cell_antibiotic.yaml
-│   ├── sars_cov2_baseline.yaml
-│   ├── sars_cov2_antiviral.yaml
-│   ├── tcell_baseline.yaml
-│   ├── tcell_stimulated.yaml
-│   ├── bkpyv_baseline.yaml
-│   ├── bkpyv_infection.yaml
-│   ├── bkpyv_tacrolimus.yaml
-│   └── bkpyv_sirolimus.yaml
-├── data/                       # Data directory
-│   ├── raw/                     # Raw biological data
-│   ├── processed/               # Processed datasets
-│   └── mock/                    # Mock datasets for testing
-│       ├── minimal_bacterium.json
-│       ├── virus_host.json
-│       └── immune_cell.json
-├── notebooks/                   # Jupyter notebooks
+├── configs/                     # Experiment configurations (BKPyV ODE + legacy scenarios)
+├── data/                        # Data directory (gitignored)
+│   ├── processed/               # Real processed outputs (GSE317012 pathway scores,
+│   │                            #   contrasts, sample metadata, microarray inventory,
+│   │                            #   synthetic patient cohort + generation params)
+│   ├── research/                # Downloaded GEO series matrices + extracted parameters
+│   └── mock/                    # Reserved (currently empty - no mock JSONs shipped)
+├── notebooks/                   # Jupyter notebooks (executed workflow)
+├── scripts/                     # Analysis/regeneration scripts (review bundle,
+│                                #   sensitivity, drug-switch, GSE317012 analyzer)
 ├── src/
 │   └── vcm/                     # Main package
 │       ├── core/                # Domain models
-│       ├── simulators/          # Simulation engines
+│       ├── simulators/          # Simulation engines (bkpyv_ode is canonical)
 │       ├── plugins/             # Biological system plugins
 │       │   ├── bacteria/
 │       │   ├── virus_host/
-│       │   └── mammalian/
+│       │   ├── mammalian/
+│       │   └── transplant/      # bk_polyomavirus
 │       ├── data/                # Data loading utilities
-│       ├── experiments/         # Experiment management
+│       ├── analysis/            # Analysis helpers
+│       ├── clinical/            # Assumption-labelled clinical bridge + risk model
+│       ├── evaluation/          # ARC evaluation
+│       ├── experiments/         # Experiment runner
 │       ├── viz/                 # Visualization tools
 │       ├── cli/                 # Command-line interface
-│       └── utils/               # Utility functions
-├── tests/                      # Test suite
-└── outputs/                     # Simulation results
+│       └── ui/                  # Streamlit app
+├── tests/                       # Test suite
+└── outputs/                     # Simulation results (gitignored)
 ```
 
 ## Adding a New Plugin
@@ -316,10 +326,15 @@ Experiment configurations use YAML format with the following structure:
 # Required fields
 experiment_id: unique_experiment_name
 plugin: plugin_id
-simulator: mechanistic|ml_based|hybrid
+simulator: mechanistic|ml_based|hybrid|bkpyv_specific|bkpyv_ode
 simulation_length: 100.0
 timestep: 1.0
+time_unit: days          # canonical unit; ODE simulator = days,
+                          # legacy discrete simulator = hours
 output_path: outputs/experiment/
+
+# Passed to the simulator constructor (rate constants, solver settings)
+simulator_parameters: {}
 
 # Optional fields
 save_interval: 1
@@ -392,7 +407,7 @@ This v1 foundation provides the architecture. Here's how to extend it with real 
 
 ### 6. Additional Plugins
 - Add more virus-host systems (influenza, HIV, RSV)
-- Implement transplant-specific models (BK polyomavirus, CMV)
+- Implement additional transplant-specific models (CMV)
 - Add stem cell differentiation models
 - Incorporate microbiome interactions
 - Add multi-organ/system models
@@ -402,6 +417,44 @@ This v1 foundation provides the architecture. Here's how to extend it with real 
 ### Running Tests
 ```bash
 pytest tests/
+```
+
+### Generate the reviewer bundle
+
+The reviewer bundle runs the ODE engine for archetype and rearranged NCCR scenarios and exports readable figures plus the underlying tables:
+
+```bash
+python scripts/generate_bkpyv_review_bundle.py
+```
+
+Outputs are written to `outputs/bkpyv_review/`:
+
+- `mechanistic_trajectory.png` â€” clinical bridge, S-phase/LT gate, and separated replication/production/immune-control traces
+- `nccr_comparison.png` â€” archetype versus rearranged NCCR hypothesis comparison
+- `drug_mechanisms.png` â€” tacrolimus versus sirolimus separated into immune control, replication, and production
+- `sensitivity_heatmap.png` â€” one-at-a-time sensitivity of peak production
+- `trajectory_data.csv`, `scenario_summary.csv`, `sensitivity_results.csv` â€” reviewable source tables
+- `manifest.json` â€” model horizon and interpretation caveats
+
+### Consistency checks and analyses
+
+```bash
+python validate_bkpyv.py       # config harness: ODE configs run + ordering sanity
+python validate_isef.py        # mechanism direction checks (drugs, S-phase gate, persistence)
+python validate_clinical.py    # regenerates clinical_validation_report.json from the bridge
+python scripts/sensitivity_analysis.py   # OAT sweep that actually perturbs the ODE
+python scripts/simulate_drug_switch.py   # continuous tac->siro switch scenario
+python scripts/compare_patient_series.py # model-vs-patient comparison (runs when a real CSV is given)
+python scripts/compare_patient_series.py --make-template   # writes data/research/patient_series_template.csv
+```
+
+The Streamlit **Simulation** page also exports the current virtual-patient
+trajectory as `bkpyv_virtual_patient_trajectory.csv`.
+
+To launch the interactive interface:
+
+```bash
+python -m streamlit run src/vcm/ui/streamlit_app.py
 ```
 
 ### Code Style

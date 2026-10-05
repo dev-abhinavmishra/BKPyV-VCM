@@ -10,6 +10,9 @@ Creates:
 
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
+
 import matplotlib.pyplot as plt
 from pathlib import Path
 import sys
@@ -45,14 +48,16 @@ def plot_roc_comparison(baseline_results, vcm_results, df, output_path):
     
     y = df['bkypan_outcome'].values
     
-    # Get probability predictions
+    # Get probability predictions (in-sample, i.e. predictions on the same
+    # data the models were trained on; cross-validated AUCs live in the
+    # results JSON, not in this figure)
     baseline_probs = baseline_results['model'].predict_proba(X_clinical)[:, 1]
     vcm_probs = vcm_results['model'].predict_proba(X_combined)[:, 1]
-    
+
     # Calculate ROC curves
     baseline_fpr, baseline_tpr, _ = roc_curve(y, baseline_probs)
     vcm_fpr, vcm_tpr, _ = roc_curve(y, vcm_probs)
-    
+
     baseline_auc = auc(baseline_fpr, baseline_tpr)
     vcm_auc = auc(vcm_fpr, vcm_tpr)
     
@@ -72,8 +77,8 @@ def plot_roc_comparison(baseline_results, vcm_results, df, output_path):
     plt.xlim([0, 1])
     plt.ylim([0, 1])
     
-    # Add note
-    plt.text(0.05, 0.95, 'n=500 simulated patients, 5-fold CV',
+    # Add note - be explicit that these curves are in-sample
+    plt.text(0.05, 0.95, 'n=500 synthetic patients\nROC shown in-sample (training data);\nsee results JSON for 5-fold CV AUCs',
              transform=plt.gca().transAxes, fontsize=10,
              verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
     

@@ -1,0 +1,7 @@
+{
+  "scope": "harness check that shipped configs run and produce sane trajectories (ordering assertions apply to the ODE engine only)",
+  "n_configs_ode": 4,
+  "n_configs_legacy": 4,
+  "failures": [],
+  "passed": true
+}

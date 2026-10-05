@@ -1,0 +1,32 @@
+1. J Infect Dis. 2006 Jan 1;193(1):80-7. doi: 10.1086/498530. Epub 2005 Nov 30.
+
+Rapid dynamics of polyomavirus type BK in renal transplant recipients.
+
+Funk GA(1), Steiger J, Hirsch HH.
+
+Author information:
+(1)School of Biological Sciences, Royal Holloway University of London, Egham, 
+UK.
+
+BACKGROUND: Polyomavirus type BK-associated nephropathy (PVAN) is an emerging 
+cause of early renal transplant failure. No specific antiviral treatment has 
+been established. Current interventions rely on improving immune functions by 
+reducing immunosuppression. In patients with PVAN, a high BK virus (BKV) load is 
+detectable in plasma. However, the relationship between BKV replication and 
+disease is not well understood.
+METHODS: In a retrospective analysis of BKV plasma load in renal transplant 
+recipients undergoing allograft nephrectomy (n = 3) or changes in 
+immunosuppressive regimen (n = 12), we calculated viral clearance rates and 
+generation times and estimated the loss of BKV-infected renal cells.
+RESULTS: After nephrectomy, BKV clearance was fast (viral half-life [t(1/2)], 
+1-2 h) or moderately fast (t(1/2), 20-38 h), depending on the sampling density, 
+but it was independent of continued immunosuppressive regimens. After changing 
+immunosuppressive regimens, BKV was cleared with a t(1/2) of 6 h-17 days. Using 
+the basic reproductive ratio, the efficacies of intervention ranged from 7% to 
+83% (mean, 28%; median, 22%).
+CONCLUSION: The results emphasize that high-level BKV replication is a major 
+pathogenetic factor that may have implications for genome rearrangements, immune 
+evasion, and antiviral resistance.
+
+DOI: 10.1086/498530
+PMID: 16323135 [Indexed for MEDLINE]

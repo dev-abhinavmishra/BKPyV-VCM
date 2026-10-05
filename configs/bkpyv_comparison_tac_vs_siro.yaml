@@ -7,13 +7,15 @@ plugin: transplant.bk_polyomavirus
 simulator: bkpyv_specific
 simulation_length: 100.0
 timestep: 1.0
+# Legacy discrete simulator: one timestep is one hour.
+time_unit: hours
 output_path: outputs/bkpyv/comparison_tac_vs_siro/
 
 # Simulator parameters (research-validated)
 simulator_params:
   # Drug effect parameters (AJT-16-821.pdf)
   tacrolimus_enhancement_factor: 1.5  # Tacrolimus activates via FKBP-12
-  mtor_inhibition_factor: 0.5  # Sirolimus IC90 = 4 ng/mL
+  mtor_inhibition_factor: 0.5  # in-vitro IC90 ~4 ng/mL (Hirsch 2016)
 
   # Replication parameters
   t_antigen_replication_threshold: 0.5
