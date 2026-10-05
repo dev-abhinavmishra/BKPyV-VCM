@@ -280,15 +280,16 @@ def run_de(adata) -> pd.DataFrame:
     return de
 
 
-def split_samples(samples_meta: dict) -> pd.DataFrame:
+def split_samples(samples_meta: dict, seed: int | None = None,
+                  frac: float = 1.0 / 3.0) -> pd.DataFrame:
     """Deterministic stratified holdout: ~1/3 of GSMs per phase are
     validation, the rest calibration. Sorted + seeded so it reproduces."""
-    rng = np.random.default_rng(SEED)
+    rng = np.random.default_rng(SEED if seed is None else seed)
     rows = []
     for phase in sorted({s["phase"] for s in samples_meta.values()}):
         gsms = sorted(g for g, s in samples_meta.items() if s["phase"] == phase)
         order = rng.permutation(len(gsms))
-        n_val = max(1, round(len(gsms) / 3))
+        n_val = max(1, round(len(gsms) * frac))
         val_idx = set(order[:n_val])
         for i, gsm in enumerate(gsms):
             rows.append(

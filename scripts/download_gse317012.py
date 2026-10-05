@@ -58,16 +58,19 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+def sha256_matches(path: Path, expected_sha256: str | None) -> bool:
+    """Case-insensitive comparison; None expectation never blocks."""
+    if not expected_sha256:
+        return True
+    return sha256_file(path) == expected_sha256.lower()
+
+
 def download_with_resume(url: str, dest: Path, expected_sha256: str | None) -> dict:
     """Stream url to dest, resuming a partial file if present."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     fetched = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-    if (
-        dest.exists()
-        and expected_sha256
-        and sha256_file(dest) == expected_sha256.lower()
-    ):
+    if dest.exists() and expected_sha256 and sha256_matches(dest, expected_sha256):
         print(f"already complete and verified: {dest}")
         return {
             "url": url,
@@ -115,16 +118,16 @@ def download_with_resume(url: str, dest: Path, expected_sha256: str | None) -> d
     print()
 
     tmp.rename(dest)
-    digest = sha256_file(dest)
-    if expected_sha256 and digest != expected_sha256.lower():
+    if not sha256_matches(dest, expected_sha256):
         raise ValueError(
-            f"sha256 mismatch for {dest}: got {digest}, expected {expected_sha256}"
+            f"sha256 mismatch for {dest}: got {sha256_file(dest)}, "
+            f"expected {expected_sha256}"
         )
-    print(f"verified sha256: {digest}")
+    print(f"verified sha256: {sha256_file(dest)}")
     return {
         "url": url,
         "path": str(dest.relative_to(REPO_ROOT)),
-        "sha256": digest,
+        "sha256": sha256_file(dest),
         "bytes": dest.stat().st_size,
         "fetched_utc": fetched,
     }
