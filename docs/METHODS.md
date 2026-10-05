@@ -1,0 +1,108 @@
+# METHODS
+
+## 1. Model — bkpyv_ode (canonical engine)
+
+15-dimensional ODE, per-day rates, `src/vcm/simulators/ode_system.py`,
+integrated with `scipy.integrate.solve_ivp` (LSODA).
+
+State: V (free virions), T (intracellular T-antigen), G_v (replication-
+permissive cells), C (cell-cycle–permissive fraction), I (infected cells),
+D (damaged cells), CC (cell-cycle state), DNA (viral DNA), E (immune
+effector), IFN (interferon), AK (antiviral state), D_tac, D_sir (drug
+concentrations), P_rep, P_immune (pathway activities).
+
+Core structure (see source for the full system):
+
+- Virion production: `p · I · T/(T + half_saturation) · s_phase_gate(CC)`
+  — T-antigen gates production through a Hill-type term; `t_threshold`
+  shapes the sirolimus phase weight (it is **not** the replication gate).
+- Clearance: `delta · V` with an antiviral-state boost (`AK`) —
+  δ = 0.4/day calibrated inside the Funk 2006 IS-change t½ range.
+- Infection: `beta · V · G_v` on a permissive-cell reservoir.
+- Immune control: effector E reduces permissive cells; IFN drives AK;
+  tacrolimus reduces immune control (D_tac term); sirolimus inhibits the
+  cell-cycle permissiveness term (mtor_inhibition).
+- Drug PK: first-order accumulation to `target` while dosing, first-order
+  clearance after `stop` (dosing_context dict).
+
+## 2. Single-cell layer — GSE317012 (Phase 1)
+
+- **Data**: GEO GSE317012, Kretzler lab human kidney-transplant biopsies,
+  26 samples (12 Control / 5 Peaking / 9 Resolving), 294,286 raw →
+  34,987 cells after QC. Download is scripted and sha256-verified
+  (`scripts/download_gse317012.py`); no manual steps.
+- **Important**: the reference contains human genes only — no viral genes.
+  Infected cells cannot be identified by viral reads.
+- **Pipeline** (`scripts/cluster_gse317012.py`): per-cell QC (min genes,
+  mt-fraction cap) → normalization (target sum) → PCA (50 comps, no
+  zero-center for memory) → neighbors → Leiden clustering → marker-panel
+  annotation (kidney cell types: proximal/distal tubule, loop of Henle,
+  collecting duct, podocyte, endothelial, fibroblast, myeloid, B/NK/other
+  immune) → module scoring for host-response gene sets (translation, S-G2M,
+  DDR, interferon, antigen presentation, mitochondrial, ECM/wound).
+- **Infected-signature call**: within tubular epithelial cells of
+  Peaking/Resolving samples, the top decile of composite viral-response
+  score is labelled `infected_signature`; the remainder is the bystander
+  comparator. This is a host-signature proxy (see LIMITATIONS).
+- **DE**: Wilcoxon rank-sum (scanpy `rank_genes_groups`), BH FDR.
+- **Calibration/validation split**: deterministic seeded stratified holdout
+  — within each phase, ~1/3 of samples → validation, remainder →
+  calibration (Control 8/4, Peaking 3/2, Resolving 6/3; recorded in
+  `gse317012_calibration_holdout.csv`). Calibration values are computed on
+  calibration split only; the same quantities are reported on the
+  validation split side-by-side for consistency checking — they are never
+  refit.
+
+## 3. Viral-load benchmark (Phase 2)
+
+- **Ground truth**: published summary statistics only (no public serial
+  qPCR dataset exists — searched GEO/dbGaP/SRA/mirrors; documented in
+  `data/research/published_kinetics.csv` with full citations):
+  - Funk 2006 (PMID 16323135): IS-change clearance t½ 0.25–17 d (n=12);
+    nephrectomy arms 1–2 h (dense) and 20–38 h (sparse), n=3;
+    intervention efficacy median 22% (7–83%).
+  - Funk 2008 (doi:10.1111/j.1600-6143.2008.02402.x): >80% curtailment →
+    viremia clears ≤7 wk; >90% → ≤3 wk; 50% ineffective; ~10 wk dynamic
+    equilibrium; urine:plasma ≈3000:1.
+  - AST IDCOP 2019 / Kotton 2024: 1,000 and 10,000 cp/mL thresholds.
+- **Calibration subset**: Funk 2006 IS-change arm — model t½ after
+  immunosuppression stop must lie inside 0.25–17 d.
+- **Validation subsets** (disjoint, never used for parameter choice):
+  Funk 2008 curtailment-response statements; Funk 2006 nephrectomy arms
+  (reported against both arms and the 1–38 h envelope — the two arms
+  measure different sampling regimes, so between-arms is compatible).
+- **Intervention start state**: peak viremia under continuous tacrolimus
+  (~1.7×10⁶ cp/mL), the clinically representative intervention range.
+- **Metrics**: clearance t½ (first crossing of half of start); time below
+  1,000 cp/mL (clearance event, wk); sustained clearance (ends below
+  threshold); band-excess RMSE on log10 cp/mL — RMS distance of the model
+  trajectory *outside* the published decay envelope (0 = fully inside);
+  δ-sweep (0.25–0.8/day) for parameter uncertainty.
+- **Results**: see `outputs/benchmark/viral_load_benchmark.json`:
+  calibration t½ 5.5 d (in range); band-excess RMSE 0.19 log10 cp/mL with
+  47% of trajectory inside the envelope; Funk 2008 checks 3/3 pass;
+  nephrectomy t½ ≈10 h (between published arms).
+
+## 4. Assumptions explicitly labelled
+
+- `p=8.0/day`, `beta=0.3/day`, `half_saturation=0.5`, immune magnitudes,
+  drug PK clearances: ASSUMPTIONS (no direct cell-level measurements).
+- V→cp/mL bridge: piecewise log-linear anchors — ASSUMPTION tied to
+  clinical thresholds, not a fitted map (`viral_load_mapper.py`).
+- Clinical-risk ORs (age ×1.9, male ×2.3, prior transplant ×3.0):
+  illustrative; directions from Demey et al. 2018 — not fitted to a cohort.
+- The risk model is a mechanistic feature extractor + illustrative
+  covariates; it is **not a trained foundation model** and is never
+  presented as one.
+
+## 5. Validation design (summary)
+
+| Layer | Calibration | Validation |
+|---|---|---|
+| Cell-state (GSE317012) | 17 samples (8C/3P/6R) | 9 held-out samples (4C/2P/3R) |
+| Kinetics (ODE) | Funk 2006 IS-change t½ range | Funk 2008 curtailments + Funk 2006 nephrectomy |
+| Risk features | — (illustrative covariates) | direction checks only |
+
+Fixed seeds everywhere (numpy `default_rng` seeds, deterministic sort+hash
+for per-cell holdout); rerunning the four pipeline commands reproduces all
+outputs byte-identically up to numeric noise in UMAP.
