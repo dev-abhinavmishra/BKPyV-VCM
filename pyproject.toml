@@ -43,6 +43,12 @@ dependencies = [
 ui = [
     "streamlit>=1.30.0",
 ]
+analysis = [
+    "scanpy>=1.10",
+    "anndata>=0.10",
+    "umap-learn>=0.5",
+    "pyarrow>=14.0",
+]
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
@@ -80,3 +86,6 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+markers = [
+    "slow: marks tests that take more than a few seconds (deselect with '-m \"not slow\"')",
+]

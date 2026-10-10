@@ -1,13 +1,16 @@
 """Tests for ODE-based BKPyV simulator and ODE system."""
 
-import pytest
+import sys
+from pathlib import Path
+
 import numpy as np
+import pytest
 from scipy.integrate import solve_ivp
 
-from vcm.simulators.ode_system import BKPyVODESystem
-from vcm.simulators.bkpyv_ode_simulator import BKPyVODESimulator
-from vcm.plugins.transplant.bk_polyomavirus import BKPolyomavirusPlugin
 from vcm.core.models import Perturbation, PerturbationType
+from vcm.plugins.transplant.bk_polyomavirus import BKPolyomavirusPlugin
+from vcm.simulators.bkpyv_ode_simulator import BKPyVODESimulator
+from vcm.simulators.ode_system import BKPyVODESystem
 
 
 class TestBKPyVODESystem:
@@ -33,7 +36,7 @@ class TestBKPyVODESystem:
         """Test that state vector names are correctly defined."""
         ode_system = BKPyVODESystem()
         names = ode_system.get_state_vector_names()
-        assert len(names) == 15
+        assert len(names) == 22
         assert 'V' in names  # Viral load
         assert 'T' in names  # T antigen
         assert 'C' in names  # Healthy cells
@@ -45,7 +48,7 @@ class TestBKPyVODESystem:
         """Test initial conditions generation."""
         ode_system = BKPyVODESystem()
         y0 = ode_system.get_initial_conditions()
-        assert len(y0) == 15
+        assert len(y0) == len(ode_system.get_state_vector_names())
         assert y0[0] == 0.0  # No initial virus
         assert y0[3] == 1.0  # One healthy cell
         assert y0[4] == 0.0  # No infected cells
@@ -64,7 +67,7 @@ class TestBKPyVODESystem:
         ode_system = BKPyVODESystem()
         y0 = ode_system.get_initial_conditions()
         dydt = ode_system.ode_system(0.0, y0)
-        assert len(dydt) == 15
+        assert len(dydt) == len(ode_system.get_state_vector_names())
         assert all(np.isfinite(dydt))
 
     def test_ode_function_with_infection(self):
@@ -72,7 +75,7 @@ class TestBKPyVODESystem:
         ode_system = BKPyVODESystem()
         y0 = ode_system.get_infection_conditions()
         dydt = ode_system.ode_system(0.0, y0)
-        assert len(dydt) == 15
+        assert len(dydt) == len(ode_system.get_state_vector_names())
         # Viral load should be changing (non-zero derivative)
         assert dydt[0] != 0.0 or dydt[1] != 0.0
 
@@ -82,7 +85,7 @@ class TestBKPyVODESystem:
         y0 = ode_system.get_infection_conditions()
         drug_events = {0.0: {'tacrolimus': 1.0}}
         dydt = ode_system.ode_system(0.0, y0, drug_events)
-        assert len(dydt) == 15
+        assert len(dydt) == len(ode_system.get_state_vector_names())
         # Drug concentrations should be changing
         assert dydt[11] < 0.0  # Tacrolimus clearance
 
@@ -97,7 +100,7 @@ class TestBKPyVODESystem:
         sol = solve_ivp(ode_func, (0, 100), y0, method='LSODA')
         assert sol.success
         assert np.all(np.isfinite(sol.y))
-        assert sol.y.shape[0] == 15  # 15 state variables
+        assert sol.y.shape[0] == len(ode_system.get_state_vector_names())
 
     def test_viral_clearance_kinetics(self):
         """Viral load must decay when production is switched off.
@@ -237,7 +240,7 @@ class TestBKPyVODESimulator:
         simulator = BKPyVODESimulator()
         y0 = simulator._cellstate_to_ode(initial_state)
 
-        assert len(y0) == 15
+        assert len(y0) == len(simulator.ode_system.get_state_vector_names())
         assert y0[0] == initial_state.metadata['viral_load']
         assert y0[1] == initial_state.genes['viral_LT'].expression_level
 
@@ -413,8 +416,6 @@ class TestBKPyVODESimulator:
 
     def test_infection_event_creation(self):
         """Test infection event creation from perturbations."""
-        simulator = BKPyVODESimulator()
-
         infection = Perturbation(
             id="bkpyv_infection",
             name="BKPyV infection",
@@ -488,3 +489,336 @@ class TestODESystemValidation:
         for solver in solvers:
             sol = solve_ivp(ode_func, (0, 20), y0, method=solver)
             assert sol.success, f"Solver {solver} failed"
+
+
+class TestExtendedCompartments:
+    """Tests for the appended adaptive-T-cell and urothelial compartments.
+
+    Indices 15-19: T_naive, T_eff, C_u, I_u, V_u.
+    """
+
+    def test_urine_amplifies_above_plasma(self):
+        """Urothelial amplification makes urinary load exceed plasma load by
+        orders of magnitude under sustained viremia (Funk 2008: urine ~3000x
+        plasma; we assert a conservative >50x on normalised units)."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y),
+            (0, 120), y0, t_eval=np.arange(0, 121, 1.0), method='LSODA',
+        )
+        assert sol.success
+        v_plasma, v_urine = sol.y[0], sol.y[19]
+        assert v_urine[-1] > 0.0
+        assert v_urine[-1] > v_plasma[-1] * 50.0
+
+    def test_urine_origin_is_urothelial(self):
+        """The urothelial production term must dominate the urine load
+        (Funk 2008: >95% of the urine load is urothelial-derived, not
+        kidney drainage)."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y),
+            (0, 120), y0, t_eval=np.arange(0, 121, 1.0), method='LSODA',
+        )
+        v_plasma, i_u = sol.y[0, -1], sol.y[18, -1]
+        p = ode_system.params
+        urothelial = p['p_u'] * i_u
+        drainage = p['drain_kidney'] * v_plasma
+        assert urothelial / (urothelial + drainage) > 0.9
+
+    def test_tcell_arm_expands_under_antigen(self):
+        """BKPyV-specific effector T cells must expand when antigen is
+        present (baseline repertoire is 0.02)."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y),
+            (0, 120), y0, t_eval=np.arange(0, 121, 1.0), method='LSODA',
+        )
+        t_eff = sol.y[16]
+        assert t_eff.max() > 0.1
+
+    def test_tacrolimus_blunts_tcell_expansion(self):
+        """Tacrolimus must suppress T_eff expansion (calcineurin/NFAT
+        blockade) — the clinically dominant mechanism for BKPyV risk under
+        tacrolimus (Kotton 2024)."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        no_drug = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y),
+            (0, 60), y0, t_eval=np.arange(0, 61, 1.0), method='LSODA',
+        )
+        with_tac = solve_ivp(
+            lambda t, y: ode_system.ode_system(
+                t, y, dosing_context={
+                    "tacrolimus": {"start": 0.0, "stop": None, "target": 1.0}}),
+            (0, 60), y0, t_eval=np.arange(0, 61, 1.0), method='LSODA',
+        )
+        assert with_tac.y[16].max() < no_drug.y[16].max() * 0.5
+
+    def test_plasma_clears_while_viruria_persists(self):
+        """Funk 2008 signature: strong curtailment clears plasma viremia
+        while the urothelial reservoir keeps shedding (viruria outlives
+        viremia — urine PCR stays positive after plasma clears)."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=3.0)
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(
+                t, y, {"tacrolimus": {"start": 0.0, "stop": None, "target": 1.0}}),
+            (0, 60), y0, t_eval=np.linspace(0, 60, 601), method='LSODA',
+        )
+        y_peak = sol.y[:, int(np.argmax(sol.y[0]))]
+
+        curtailed = BKPyVODESystem({"p": 8.0 * 0.1, "p_u": 500.0 * 0.1})
+        sol2 = solve_ivp(
+            lambda t, y: curtailed.ode_system(t, y),
+            (0, 140), y_peak, t_eval=np.linspace(0, 140, 561), method='LSODA',
+        )
+        assert sol2.y[0, -1] < 0.05      # plasma viremia cleared
+        assert sol2.y[19, -1] > 1.0      # urinary shedding persists
+
+    def test_metadata_exposes_new_compartments(self):
+        """CellState metadata must carry the new compartment readouts."""
+        plugin = BKPolyomavirusPlugin()
+        initial_state = plugin.create_initial_state()
+        infection = Perturbation(
+            id="bkpyv_infection", name="BKPyV infection",
+            perturbation_type=PerturbationType.VIRAL_INFECTION,
+            magnitude=1.0, timing=5.0,
+        )
+        simulator = BKPyVODESimulator()
+        result = simulator.simulate(
+            initial_state=initial_state, perturbations=[infection],
+            n_steps=20, timestep=1.0,
+        )
+        md = result.final_state.metadata
+        for key in ("urine_viral_load", "bkpyv_tcell_effector",
+                    "bkpyv_tcell_naive", "urothelial_infected_cells"):
+            assert key in md
+
+
+class TestPharmacokineticDosing:
+    """ng/mL (trough) dosing schedules with real drug half-lives."""
+
+    def test_ngml_taper_resolves_to_troughs(self):
+        """A tacrolimus 8 -> 4 ng/mL step taper must drive D_tac to
+        intensity 1.0 then 0.5 (ref trough 8 ng/mL)."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        ctx = {"tacrolimus": [
+            {"start": 0.0, "stop": 42.0, "trough_ng_ml": 8.0},
+            {"start": 42.0, "stop": None, "trough_ng_ml": 4.0},
+        ]}
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y, ctx),
+            (0, 90), y0, t_eval=np.arange(0, 91, 1.0), method='LSODA',
+        )
+        d_tac = sol.y[11]
+        assert 0.9 <= d_tac[40] <= 1.1      # 8 ng/mL steady state
+        assert 0.4 <= d_tac[60] <= 0.6      # 4 ng/mL steady state
+
+    def test_ngml_washout_follows_half_life(self):
+        """Stopping tacrolimus must wash out on the ~12 h half-life, not the
+        legacy ad-hoc clearance envelope."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        ctx = {"tacrolimus": [{"start": 0.0, "stop": 30.0, "trough_ng_ml": 8.0}]}
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y, ctx),
+            (0, 60), y0, t_eval=np.linspace(0, 60, 121), method='LSODA',
+        )
+        d_tac = sol.y[11]
+        # 12 h half-life: 2 days after stop -> ~4 half-lives -> ~1/16 of target
+        stopped_idx = int(np.searchsorted(sol.t, 32.0))
+        assert d_tac[stopped_idx] < 0.15
+
+    def test_sirolimus_slow_accumulation(self):
+        """Sirolimus (t½ ~60 h) must accumulate slowly — a tac->sir switch is
+        not instantaneous, matching clinical practice."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        ctx = {"sirolimus": [{"start": 0.0, "stop": None, "trough_ng_ml": 6.0}]}
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y, ctx),
+            (0, 30), y0, t_eval=np.arange(0, 31, 1.0), method='LSODA',
+        )
+        d_sir = sol.y[12]
+        target = 6.0 / ode_system.params['sir_ref_trough_ngml']
+        assert d_sir[2] < target * 0.6      # far from steady state at day 2
+        assert d_sir[14] > target * 0.7     # mostly there by ~2 weeks
+
+    def test_legacy_dimensionless_target_unchanged(self):
+        """Dimensionless ``target`` schedules keep the legacy envelope."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        ctx = {"tacrolimus": {"start": 0.0, "stop": None, "target": 1.0}}
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y, ctx),
+            (0, 30), y0, t_eval=np.arange(0, 31, 1.0), method='LSODA',
+        )
+        assert sol.y[11, -1] > 0.9
+
+    def test_ngml_units_from_perturbation(self):
+        """Perturbations declaring parameters units=ng_ml must reach the ODE
+        as trough_ng_ml windows."""
+        pert = Perturbation(
+            id="tac_taper", name="tac taper",
+            perturbation_type=PerturbationType.DRUG_TREATMENT,
+            target_id="FKBP1A", magnitude=8.0, timing=0.0, duration=42.0,
+            parameters={"units": "ng_ml"},
+        )
+        pert2 = Perturbation(
+            id="tac_low", name="tac low",
+            perturbation_type=PerturbationType.DRUG_TREATMENT,
+            target_id="FKBP1A", magnitude=4.0, timing=42.0,
+            parameters={"units": "ng_ml"},
+        )
+        ctx = BKPyVODESimulator._build_dosing_context([pert, pert2])
+        assert len(ctx["tacrolimus"]) == 2
+        assert ctx["tacrolimus"][0]["trough_ng_ml"] == 8.0
+        assert ctx["tacrolimus"][1]["trough_ng_ml"] == 4.0
+        assert ctx["tacrolimus"][0]["stop"] == 42.0
+
+
+class TestNCCREmergence:
+    """F_rr quasi-species dynamics: rearranged NCCR emerges under
+    sustained replication (Gosert 2008)."""
+
+    def test_state_vector_is_21d_with_frr_last(self):
+        names = BKPyVODESystem().get_state_vector_names()
+        assert names[-2] == 'F_rr'
+        assert names[-1] == 'F_rr_u'
+        assert len(BKPyVODESystem().get_initial_conditions()) == len(names)
+
+    def test_frr_emerges_under_sustained_viremia(self):
+        """An archetype inoculum evolves a substantial rearranged fraction
+        over the weeks-months window reported clinically."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y, None),
+            (0, 120), y0, t_eval=np.linspace(0, 120, 121), method='LSODA',
+        )
+        f_rr = sol.y[20]
+        assert f_rr[0] == pytest.approx(0.0)
+        assert np.all((f_rr >= 0.0) & (f_rr <= 1.0))
+        assert f_rr[-1] > 0.5
+
+    def test_rearranged_preset_seeds_f1(self):
+        """nccr_variant='rearranged' maps onto the F_rr=1 boundary instead
+        of pinning static multipliers."""
+        sim = BKPyVODESimulator()
+        plugin = BKPolyomavirusPlugin()
+        cell = plugin.create_initial_state({"nccr_variant": "rearranged"})
+        y0 = sim._cellstate_to_ode(cell)
+        assert y0[20] == pytest.approx(1.0)
+        assert y0[21] == pytest.approx(1.0)  # urinary pool seeded too
+        early, capsid = sim.ode_system._nccr_multipliers(1.0)
+        assert early == pytest.approx(2.0)
+        assert capsid == pytest.approx(0.5)
+
+    def test_emergence_can_be_disabled(self):
+        """nccr_emergence_enabled=0 restores the fixed-genotype model."""
+        ode_system = BKPyVODESystem()
+        ode_system.params['nccr_emergence_enabled'] = 0.0
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y, None),
+            (0, 60), y0, t_eval=[60], method='LSODA',
+        )
+        assert sol.y[20, -1] == pytest.approx(0.0)
+
+    def test_strong_suppression_slows_emergence(self):
+        """Under heavy immunosuppression-driven curtailment the rearranged
+        fraction stays much lower than in untreated infection."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        sol_on = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y, None),
+            (0, 90), y0, t_eval=[90], method='LSODA',
+        )
+        ode_curtailed = BKPyVODESystem()
+        ode_curtailed.params.update({'p': 8.0 * 0.1, 'p_u': 500.0 * 0.1})
+        sol_off = solve_ivp(
+            lambda t, y: ode_curtailed.ode_system(t, y, None),
+            (0, 90), y0, t_eval=[90], method='LSODA',
+        )
+        assert sol_off.y[20, -1] < sol_on.y[20, -1] * 0.5
+
+
+class TestReductionSchedules:
+    """The model's headline clinical finding: tac->sir conversion should
+    dominate tac tapering on BOTH viral clearance and immune rebound."""
+
+    def test_sir_conversion_clears_viremia(self):
+        """Conversion to sirolimus clears plasma viremia below the Kotton
+        screening threshold within the horizon; tapering to 3 ng/mL tac
+        does not."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        from optimize_reduction_schedule import evaluate_schedule
+
+        taper = evaluate_schedule([(0.0, 28.0, 8.0), (28.0, None, 3.0)])
+        conversion = evaluate_schedule([(0.0, 28.0, 8.0), (28.0, None, 3.0)],
+                                       sir_trough=4.0)
+        assert taper["clearance_weeks"] is None
+        assert conversion["clearance_weeks"] is not None
+        assert conversion["clearance_weeks"] <= 16.0
+        # The winning schedule also rebounds LESS — sir hits replication
+        # permissiveness, not just the T-cell brake.
+        assert conversion["rebound_index"] < taper["rebound_index"]
+
+    def test_frr_tracks_replication_pressure(self):
+        """Schedules that fail to clear leave the virion pool dominated by
+        rearranged NCCR; conversion suppresses emergence."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        from optimize_reduction_schedule import evaluate_schedule
+
+        hold = evaluate_schedule([(0.0, None, 8.0)])
+        conversion = evaluate_schedule([(0.0, 28.0, 8.0), (28.0, None, 3.0)],
+                                       sir_trough=4.0)
+        assert hold["final_frr"] > 0.8
+        assert conversion["final_frr"] < hold["final_frr"]
+
+    def test_rr_enriched_in_plasma_not_urine(self):
+        """Gosert 2008 signature: the rearranged fraction enriches in the
+        kidney (plasma) pool relative to the urinary pool — urothelial
+        production is shedding-driven so the rr advantage is weaker."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y, None),
+            (0, 120), y0, t_eval=np.linspace(0, 120, 121), method='LSODA',
+        )
+        f_k, f_u = sol.y[20], sol.y[21]
+        assert f_k[-1] > 2.0 * f_u[-1]
+        assert np.all((f_u >= 0.0) & (f_u <= 1.0))
+
+
+class TestScreeningPolicies:
+    """Screening-trigger policy ordering (Kotton 2024 logic, mechanistic)."""
+
+    def test_early_trigger_suppresses_emergence(self):
+        """Acting at the 1k screening trigger leaves the kidney pool
+        archetype-dominated; never acting lets rr variants take over."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        from screening_policy_analysis import run_policy
+
+        early = run_policy(1_000.0)
+        never = run_policy(float("inf"))
+        assert early["clearance_weeks"] is not None
+        assert early["final_frr_kidney"] < 0.1
+        assert never["final_frr_kidney"] > 0.5
+
+    def test_later_triggers_lose_efficacy(self):
+        """Monotone clinical ordering: earlier action -> earlier clearance
+        and less T-cell rebound."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        from screening_policy_analysis import run_policy
+
+        screen = run_policy(1_000.0)
+        pyvan = run_policy(10_000.0)
+        assert screen["clearance_weeks"] < pyvan["clearance_weeks"]
+        assert screen["rebound_index"] < pyvan["rebound_index"]

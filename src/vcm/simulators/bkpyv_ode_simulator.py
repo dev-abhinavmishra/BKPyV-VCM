@@ -23,11 +23,13 @@ from vcm.simulators.ode_system import BKPyVODESystem
 class BKPyVODESimulator(BaseSimulator):
     """ODE-based BK polyomavirus simulator using scipy integration.
     
-    This simulator uses a system of 15 coupled ODEs to model:
+    This simulator uses a system of 20 coupled ODEs to model:
     - Viral dynamics (viral load, T antigen, viral gene expression)
     - Host cell states (healthy, infected, dead cells)
     - Cell cycle progression and DNA synthesis
     - Immune response (effector cells, interferon, antiviral state)
+    - BKPyV-specific adaptive T cells (naive → effector; calcineurin-sensitive)
+    - Urinary/urothelial compartment with kidney↔bladder cross-feeding (Funk 2008)
     - Drug pharmacodynamics (tacrolimus, sirolimus)
     - Pathway activities (DNA replication, innate immune)
     
@@ -207,6 +209,7 @@ class BKPyVODESimulator(BaseSimulator):
         # applied discretely at segment boundaries so the adaptive solver never
         # sees a discontinuous state mutation mid-step.
         dosing_context = self._build_dosing_context(all_perturbations)
+        self._dosing_uses_pk = self._context_uses_pk(dosing_context)
         end_time = n_steps * timestep
         t_eval = np.linspace(0.0, end_time, n_steps + 1)
         event_times = sorted({
@@ -304,6 +307,7 @@ class BKPyVODESimulator(BaseSimulator):
         # Dosing context for this step (continuous infusion semantics).
         perts = [p for p in (perturbation,) if p is not None]
         dosing_context = self._build_dosing_context(perts)
+        self._dosing_uses_pk = self._context_uses_pk(dosing_context)
 
         # Solve ODE for single step
         sol = self._solve_ode_system(y0, t_span, t_eval, dosing_context)
@@ -313,12 +317,30 @@ class BKPyVODESimulator(BaseSimulator):
         return new_state
 
     @staticmethod
+    def _context_uses_pk(dosing_context: Dict[str, Any]) -> bool:
+        """True when any schedule window carries a real ``trough_ng_ml`` —
+        only then are the ``*_est_ngml`` metadata readouts meaningful
+        (dimensionless ``target`` dosing is NOT a plasma concentration)."""
+        for scheds in dosing_context.values():
+            for w in scheds if isinstance(scheds, list) else [scheds]:
+                if "trough_ng_ml" in w:
+                    return True
+        return False
+
+    @staticmethod
     def _build_dosing_context(perturbations: list[Perturbation]) -> Dict[str, Any]:
         """Build the continuous-dosing schedule used by the ODE right-hand side.
 
-        Each drug entry is ``{'start': day, 'stop': day|None, 'target': magnitude}``.
-        Multiple treatments of the same drug merge to the earliest start,
-        latest stop, and strongest target. ``stop=None`` means ongoing dosing.
+        Each drug maps to a LIST of schedule windows ``{'start': day,
+        'stop': day|None, 'target': magnitude}`` for dimensionless dosing, or
+        ``{'start', 'stop', 'trough_ng_ml': magnitude}`` when the
+        perturbation declares ``parameters={"units": "ng_ml"}`` — a real
+        steady-state trough concentration driven with the drug's
+        elimination half-life (see ``BKPyVODESystem.ode_system``).
+        Windows are kept as a schedule rather than merged so that stepwise
+        regimens (e.g. a tacrolimus taper 8 -> 4 ng/mL) are expressible;
+        when windows overlap, the strongest intensity wins in the ODE.
+        ``stop=None`` means ongoing dosing.
         """
         context: Dict[str, Any] = {}
         for pert in perturbations:
@@ -330,20 +352,11 @@ class BKPyVODESimulator(BaseSimulator):
             start = float(pert.timing) if pert.timing is not None else 0.0
             stop = None if pert.duration is None else start + float(pert.duration)
             magnitude = float(pert.magnitude)
-            if drug not in context:
-                context[drug] = {"start": start, "stop": stop, "target": magnitude, "continuous": pert.duration is None}
-            else:
-                entry = context[drug]
-                entry["start"] = min(entry["start"], start)
-                if entry["continuous"] or pert.duration is None:
-                    entry["stop"] = None
-                    entry["continuous"] = True
-                elif entry["stop"] is not None and stop is not None:
-                    entry["stop"] = max(entry["stop"], stop)
-                entry["target"] = max(entry["target"], magnitude)
-        for entry in context.values():
-            if entry.pop("continuous", False):
-                entry["stop"] = None
+            ng_units = str((pert.parameters or {}).get("units", "")).lower() in (
+                "ng_ml", "ng/ml", "ngml", "ng/ml trough")
+            dose_key = "trough_ng_ml" if ng_units else "target"
+            context.setdefault(drug, []).append(
+                {"start": start, "stop": stop, dose_key: magnitude})
         return context
 
     def _solve_ode_system(self, y0: np.ndarray, t_span: tuple,
@@ -429,13 +442,17 @@ class BKPyVODESimulator(BaseSimulator):
         y0[7] = dna  # DNA
         y0[13] = p_rep  # P_rep
         y0[14] = p_immune  # P_immune
-        # Variant presets are overridable for calibration/sensitivity work.
-        # This makes it possible to distinguish a biological scenario from a
-        # fitted coefficient instead of silently overwriting the coefficient.
-        if "nccr_early_expression_multiplier" not in self.config:
-            self.ode_system.params["nccr_early_expression_multiplier"] = 2.0 if nccr_variant == "rearranged" else 1.0
-        if "nccr_capsid_expression_multiplier" not in self.config:
-            self.ode_system.params["nccr_capsid_expression_multiplier"] = 0.5 if nccr_variant == "rearranged" else 1.0
+        # Variant presets now seed the NCCR quasi-species state instead of
+        # pinning static multipliers: archetype starts F_rr=0, rearranged
+        # F_rr=1 — the two boundary conditions of the in-host emergence
+        # dynamics in ``ode_system``. Explicit ``nccr_*_expression_multiplier``
+        # config overrides remain the F_rr=0 endpoint (archetype baseline)
+        # so calibration/sensitivity work is unaffected.
+        if len(y0) > 20:
+            rr_seed = 1.0 if nccr_variant == "rearranged" else 0.0
+            y0[20] = rr_seed  # kidney pool
+            if len(y0) > 21:
+                y0[21] = rr_seed  # urinary pool
         
         return y0
     
@@ -450,8 +467,17 @@ class BKPyVODESimulator(BaseSimulator):
         Returns:
             CellState object
         """
-        # Unpack state vector
-        V, T, G_v, C, I, D, CC, DNA, E, IFN, AK, D_tac, D_sir, P_rep, P_immune = y
+        # Unpack state vector (15-dim intracellular block + appended
+        # T-cell and urothelial compartments; extras defensively defaulted
+        # for any legacy 15-vector caller)
+        V, T, G_v, C, I, D, CC, DNA, E, IFN, AK, D_tac, D_sir, P_rep, P_immune = y[:15]
+        T_naive = float(y[15]) if len(y) > 15 else 0.0
+        T_eff = float(y[16]) if len(y) > 16 else 0.0
+        C_u = float(y[17]) if len(y) > 17 else 1.0
+        I_u = float(y[18]) if len(y) > 18 else 0.0
+        V_u = float(y[19]) if len(y) > 19 else 0.0
+        F_rr = float(y[20]) if len(y) > 20 else 0.0
+        F_rr_u = float(y[21]) if len(y) > 21 else 0.0
         
         # Create new state based on template
         new_state = copy.deepcopy(template_state)
@@ -460,7 +486,7 @@ class BKPyVODESimulator(BaseSimulator):
         # Update viral genes
         new_state.genes["viral_LT"].expression_level = T
         new_state.genes["viral_ST"].expression_level = G_v * 0.6
-        capsid_multiplier = self.ode_system.params.get("nccr_capsid_expression_multiplier", 1.0)
+        _early_eff, capsid_multiplier = self.ode_system._nccr_multipliers(F_rr)
         new_state.genes["viral_VP1"].expression_level = G_v * 0.3 * capsid_multiplier
         new_state.genes["viral_VP2"].expression_level = G_v * 0.05
         new_state.genes["viral_VP3"].expression_level = G_v * 0.05
@@ -518,6 +544,23 @@ class BKPyVODESimulator(BaseSimulator):
         new_state.metadata["tacrolimus_effect"] = D_tac
         new_state.metadata["sirolimus_effect"] = D_sir
         new_state.metadata["nccr_variant"] = template_state.metadata.get("nccr_variant", "archetype")
+
+        # Estimated trough concentrations — emitted ONLY when the schedule
+        # declared real trough_ng_ml windows. Under dimensionless `target`
+        # dosing D is a unit intensity, NOT a plasma level, so no est_ngml
+        # is emitted (avoids mislabelling units on the legacy path).
+        if getattr(self, "_dosing_uses_pk", False):
+            new_state.metadata["tacrolimus_est_ngml"] = D_tac * self.ode_system.params.get("tac_ref_trough_ngml", 8.0)
+            new_state.metadata["sirolimus_est_ngml"] = D_sir * self.ode_system.params.get("sir_ref_trough_ngml", 4.0)
+
+        # Adaptive T-cell arm and urinary compartment (Funk 2008)
+        new_state.metadata["bkpyv_tcell_naive"] = T_naive
+        new_state.metadata["bkpyv_tcell_effector"] = T_eff
+        new_state.metadata["urothelial_healthy_cells"] = C_u
+        new_state.metadata["urothelial_infected_cells"] = I_u
+        new_state.metadata["urine_viral_load"] = max(0.0, V_u)
+        new_state.metadata["nccr_rearranged_fraction"] = F_rr
+        new_state.metadata["nccr_rearranged_fraction_urine"] = F_rr_u
         new_state.metadata["intracellular_replication_flux"] = float(max(0.0, V * (T / (T + 0.5))))
         new_state.metadata["viral_production_rate"] = float(max(0.0, P_rep * T))
         new_state.metadata["immune_control_index"] = float(max(0.0, min(1.0, P_immune)))

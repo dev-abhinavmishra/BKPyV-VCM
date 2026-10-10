@@ -15,7 +15,7 @@ This document describes the ODE (Ordinary Differential Equation) based implement
 ### Components
 
 1. **ODE System Definition** (`src/vcm/simulators/ode_system.py`)
-   - Defines the 15-dimensional state vector and differential equations
+   - Defines the 22-dimensional state vector and differential equations
    - Implements research-validated parameters
    - Provides initial conditions and state variable management
 
@@ -32,7 +32,8 @@ This document describes the ODE (Ordinary Differential Equation) based implement
 
 ## State Variables
 
-The ODE system uses 15 state variables:
+The ODE system uses 22 state variables (15 core + 7 appended extensions;
+indices never renumbered — new states append only):
 
 | Index | Variable | Description | Biological Meaning |
 |-------|----------|-------------|-------------------|
@@ -51,13 +52,24 @@ The ODE system uses 15 state variables:
 | 12 | D_sir | Sirolimus concentration | Sirolimus drug concentration |
 | 13 | P_rep | DNA replication pathway activity | DNA replication pathway flux |
 | 14 | P_immune | Innate immune pathway activity | Innate immune signaling activity |
+| 15 | T_naive | BKPyV-specific naive T cells | Tacrolimus-inhibited priming (NFAT) |
+| 16 | T_eff | BKPyV-specific effector T cells | Antigen-driven expansion and infected-cell kill |
+| 17 | C_u | Healthy urothelial cells | Urinary reservoir (Funk 2008) |
+| 18 | I_u | Infected urothelial cells | >95% of urinary load is urothelial |
+| 19 | V_u | Urinary virion pool | urine:plasma ~3000:1 |
+| 20 | F_rr | rr-NCCR fraction, kidney pool | In-host quasi-species emergence (Gosert 2008) |
+| 21 | F_rr_u | rr-NCCR fraction, urinary pool | Weakened selection + drainage mixing |
 
 ## Differential Equations (v2 form, matching `ode_system.py`)
 
 ### Viral dynamics
 
 ```
-dV/dt = p * I * (T / (T + K_T)) * sir_effect - delta * V * (1 + a_max * AK/(AK + a_half))
+dV/dt = p * I * (T / (T + K_T)) * sir_effect * virion_cost - delta * V * (1 + a_max * AK/(AK + a_half))
+
+  where virion_cost = 1 - (1 - nccr_capsid_eff) * rr_capsid_virion_cost
+  (the rearranged pool's capsid deficit partially reduces progeny yield —
+  expression deficit != yield deficit 1:1)
 ```
 
 - `sir_effect` saturates with sirolimus dose and is stronger before T crosses `t_threshold`.

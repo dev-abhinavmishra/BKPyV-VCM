@@ -10,15 +10,7 @@ from vcm.ui import streamlit_app
 REPO_ROOT = Path(__file__).resolve().parents[1]
 APP_PATH = REPO_ROOT / "src" / "vcm" / "ui" / "streamlit_app.py"
 
-PAGE_INDEX = {
-    "Home": 0,
-    "Simulation": 1,
-    "Visualization": 2,
-    "Risk Prediction": 3,
-    "Comparison": 4,
-    "Review Bundle": 5,
-    "Documentation": 6,
-}
+
 
 
 def _app():
@@ -26,10 +18,10 @@ def _app():
 
 
 def _open_page(at, name):
-    """Navigate the sidebar radio to the named page."""
+    """Navigate the sidebar radio to the named page (order-insensitive)."""
     options = list(at.sidebar.radio[0].options)
-    target = options[PAGE_INDEX[name]]
-    assert name in target
+    target = next((o for o in options if name in o), None)
+    assert target is not None, f"page {name!r} not in sidebar options {options}"
     at.sidebar.radio[0].set_value(target)
     at.run()
     return at
@@ -65,13 +57,13 @@ def _entry(viral_loads, scenario="infection_no_drug", nccr="archetype", timestep
 # ---------- all-page coverage ----------
 
 
-def test_all_seven_pages_render_with_expected_content():
+def test_all_pages_render_with_expected_content():
     """Every sidebar page loads with no exception and page-specific content."""
     at = _app()
     at.run()
     assert len(at.exception) == 0
     options = list(at.sidebar.radio[0].options)
-    assert len(options) == 7
+    assert len(options) == 11
 
     expectations = {
         "Home": lambda a: any("Welcome to the BKPyV" in m.value for m in a.markdown),
@@ -79,9 +71,17 @@ def test_all_seven_pages_render_with_expected_content():
         "Visualization": lambda a: any(
             "No simulation results available" in w.value for w in a.warning
         ),
+        "Single-Cell": lambda a: any("Single-Cell Analysis" in m.value for m in a.markdown),
+        "Viral-Load Validation": lambda a: any(
+            "Viral-Load Validation" in m.value for m in a.markdown
+        ),
         "Risk Prediction": lambda a: any("Patient Clinical Data" == s.value for s in a.subheader),
         "Comparison": lambda a: any("populate this page" in i.value for i in a.info),
+        "Parameters & Assumptions": lambda a: any(
+            "Parameters & Assumptions" in m.value for m in a.markdown
+        ),
         "Review Bundle": lambda a: any("Generate review bundle" in b.label for b in a.button),
+        "Regimen Design": lambda a: any("Regimen Design" in m.value for m in a.markdown),
         "Documentation": lambda a: any("Clinical Background" in s.value for s in a.subheader),
     }
     for name, check in expectations.items():

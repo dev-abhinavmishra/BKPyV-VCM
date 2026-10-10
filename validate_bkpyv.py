@@ -90,10 +90,10 @@ def run_simulation(config_name, config_path):
         )
         perturbations.append(perturbation)
     
-    # Run simulation (use first perturbation if multiple)
+    # Run simulation with the full perturbation list (drug + infection windows)
     result = simulator.simulate(
         initial_state,
-        perturbations[0] if perturbations else None,
+        perturbations=perturbations,
         n_steps=int(config_dict['simulation_length']),
         timestep=config_dict['timestep']
     )
@@ -237,7 +237,7 @@ def main():
     
     # Check 1: Tacrolimus > Control in viral replication
     print("\n✓ Check 1: Tacrolimus condition produces more replication than control")
-    if 'Infection (No Drug)' in results and 'Tacrolimus Exposure' in results:
+    if results.get('Infection (No Drug)') and results.get('Tacrolimus Exposure'):
         control_load = results['Infection (No Drug)']['viral_analysis']['final_load']
         tacrolimus_load = results['Tacrolimus Exposure']['viral_analysis']['final_load']
         print(f"  Control final viral load: {control_load:.2f}")
@@ -249,7 +249,7 @@ def main():
     
     # Check 2: Sirolimus < Tacrolimus in early replication
     print("\n✓ Check 2: Sirolimus suppresses early replication more than tacrolimus")
-    if 'Tacrolimus Exposure' in results and 'Sirolimus Exposure' in results:
+    if results.get('Tacrolimus Exposure') and results.get('Sirolimus Exposure'):
         tacrolimus_load = results['Tacrolimus Exposure']['viral_analysis']['final_load']
         sirolimus_load = results['Sirolimus Exposure']['viral_analysis']['final_load']
         print(f"  Tacrolimus final viral load: {tacrolimus_load:.2f}")
@@ -268,7 +268,7 @@ def main():
     
     # Check 3: High replication > Low replication
     print("\n✓ Check 3: High cell-cycle/DNA-repair permissiveness increases viral expansion")
-    if 'Low Replication' in results and 'High Replication' in results:
+    if results.get('Low Replication') and results.get('High Replication'):
         low_load = results['Low Replication']['viral_analysis']['final_load']
         high_load = results['High Replication']['viral_analysis']['final_load']
         print(f"  Low replication final viral load: {low_load:.2f}")

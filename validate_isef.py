@@ -28,8 +28,10 @@ from typing import Dict, List, Tuple
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
+from scipy.integrate import solve_ivp
+
 from vcm.plugins.transplant.bk_polyomavirus import BKPolyomavirusPlugin
-from vcm.simulators.bkpyv_simulator import BKPyVSimulator
+from vcm.simulators.ode_system import BKPyVODESystem
 from vcm.core.models import Perturbation, PerturbationType
 
 
@@ -303,31 +305,41 @@ class ISEFQualitativeValidator:
         Returns:
             Peak virtual viral load
         """
-        plugin = BKPolyomavirusPlugin()
-        initial_state = plugin.create_initial_state()
-        
-        simulator = BKPyVSimulator({
-            'tacrolimus_enhancement_factor': tacrolimus_enhancement,
-            'mtor_inhibition_factor': sirolimus_inhibition,
-            'cell_cycle_s_phase_bonus': cell_cycle_bonus,
-            't_antigen_replication_threshold': t_antigen_threshold,
+        # Canonical engine: the bkpyv_ode 15-dimensional system (per-day rates).
+        # The legacy discrete simulator (BKPyVSimulator) is superseded and did
+        # not reproduce these mechanism directions; see docs/DECISIONS.md.
+        ode = BKPyVODESystem(params={
+            's_phase_bonus': cell_cycle_bonus,
+            # The ODE's T-antigen replication gate is the half-saturation of the
+            # T->viral-production map (T/(T+half_saturation)); 't_threshold'
+            # only shapes sirolimus timing and does not gate replication.
+            'half_saturation': t_antigen_threshold,
         })
-        
-        n_steps = int(simulation_length)
-        result = simulator.simulate(
-            initial_state=initial_state,
-            perturbation=None,
-            n_steps=n_steps,
-            timestep=1.0
+        y0 = ode.get_infection_conditions(viral_load=0.5)
+
+        # Map the legacy scenario knobs to ODE dosing contexts: any non-unity
+        # drug factor means the corresponding drug is administered at full
+        # dimensionless dosing intensity from day 0 (magnitude-response
+        # curves are covered by scripts/sensitivity_analysis.py).
+        dosing_context = {}
+        if tacrolimus_enhancement != 1.0:
+            dosing_context['tacrolimus'] = {'start': 0.0, 'stop': None, 'target': 1.0}
+        if sirolimus_inhibition != 1.0:
+            dosing_context['sirolimus'] = {'start': 0.0, 'stop': None, 'target': 1.0}
+
+        t_eval = np.linspace(0.0, simulation_length, 500)
+        sol = solve_ivp(
+            lambda t, y: ode.ode_system(t, y, dosing_context=dosing_context or None),
+            (0.0, simulation_length),
+            y0,
+            method='LSODA',
+            t_eval=t_eval,
         )
-        
-        # Extract peak viral load
-        viral_loads = [
-            step.cell_state.metadata.get('viral_load', 0.0)
-            for step in result.steps
-        ]
-        
-        return max(viral_loads) if viral_loads else 0.0
+        if not sol.success:
+            return 0.0
+
+        viral_loads = sol.y[0]  # V is state index 0
+        return float(np.max(viral_loads))
     
     def generate_isef_validation_report(self) -> Dict[str, any]:
         """Generate comprehensive ISEF validation report.
@@ -355,7 +367,7 @@ class ISEFQualitativeValidator:
         }
         
         # Calculate overall pass rate
-        total_patterns = len(all_results) * 2  # Each validation has 2 patterns
+        total_patterns = sum(len(result_set) for result_set in all_results.values())
         passed_patterns = sum(
             1 for result_set in all_results.values()
             for pattern in result_set.values()

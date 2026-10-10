@@ -69,6 +69,8 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -e .
 # optional: dashboard UI
 pip install -e ".[ui]"
+# optional: single-cell analysis pipeline (scanpy/anndata/umap-learn/pyarrow)
+pip install -e ".[analysis]"
 # or with uv
 uv pip install -e .
 ```
@@ -77,6 +79,39 @@ uv pip install -e .
 ```bash
 python -m vcm list-plugins
 ```
+
+### Dashboard (one command)
+
+```bash
+streamlit run src/vcm/ui/streamlit_app.py
+```
+
+Pages: model overview (Home), scenario simulator (choose drug, dose,
+start/stop day), single-cell results (GSE317012), viral-load validation
+(benchmark vs published kinetics), risk prediction, comparison, a
+parameter/assumption table with citations, and a review-bundle export.
+
+### Reproducing the analyses
+
+All pipeline outputs under `data/` and `outputs/` are generated artifacts
+(gitignored) — regenerate them with the scripts below. A clean clone plus
+these commands reproduces every figure and table:
+
+```bash
+# 1. GSE317012 biopsy scRNA-seq (1.9 GB download, sha256-verified, no manual steps)
+python scripts/download_gse317012.py          # fetch + extract + verify
+python scripts/analyze_gse317012.py           # biopsy-level pathway analysis
+python scripts/cluster_gse317012.py           # cell-level QC/clustering/DE/holdout
+
+# 2. Plasma viral-load benchmark (published kinetics, ~1 min)
+python scripts/benchmark_viral_load.py
+
+# 3. Tests
+python -m pytest tests/ -q
+```
+
+Fixed seeds make outputs deterministic. See `docs/METHODS.md` for the
+validation design and `docs/STATE.md` for the audit log.
 
 ## Quick Start
 
