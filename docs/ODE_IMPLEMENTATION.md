@@ -15,7 +15,7 @@ This document describes the ODE (Ordinary Differential Equation) based implement
 ### Components
 
 1. **ODE System Definition** (`src/vcm/simulators/ode_system.py`)
-   - Defines the 15-dimensional state vector and differential equations
+   - Defines the 21-dimensional state vector and differential equations
    - Implements research-validated parameters
    - Provides initial conditions and state variable management
 

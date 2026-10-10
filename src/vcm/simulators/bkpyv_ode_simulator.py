@@ -209,6 +209,7 @@ class BKPyVODESimulator(BaseSimulator):
         # applied discretely at segment boundaries so the adaptive solver never
         # sees a discontinuous state mutation mid-step.
         dosing_context = self._build_dosing_context(all_perturbations)
+        self._dosing_uses_pk = self._context_uses_pk(dosing_context)
         end_time = n_steps * timestep
         t_eval = np.linspace(0.0, end_time, n_steps + 1)
         event_times = sorted({
@@ -306,6 +307,7 @@ class BKPyVODESimulator(BaseSimulator):
         # Dosing context for this step (continuous infusion semantics).
         perts = [p for p in (perturbation,) if p is not None]
         dosing_context = self._build_dosing_context(perts)
+        self._dosing_uses_pk = self._context_uses_pk(dosing_context)
 
         # Solve ODE for single step
         sol = self._solve_ode_system(y0, t_span, t_eval, dosing_context)
@@ -313,6 +315,17 @@ class BKPyVODESimulator(BaseSimulator):
         # Convert back to CellState
         new_state = self._ode_to_cellstate(sol.y.T[0], current_state, current_state.timestamp + timestep)
         return new_state
+
+    @staticmethod
+    def _context_uses_pk(dosing_context: Dict[str, Any]) -> bool:
+        """True when any schedule window carries a real ``trough_ng_ml`` —
+        only then are the ``*_est_ngml`` metadata readouts meaningful
+        (dimensionless ``target`` dosing is NOT a plasma concentration)."""
+        for scheds in dosing_context.values():
+            for w in scheds if isinstance(scheds, list) else [scheds]:
+                if "trough_ng_ml" in w:
+                    return True
+        return False
 
     @staticmethod
     def _build_dosing_context(perturbations: list[Perturbation]) -> Dict[str, Any]:
@@ -528,12 +541,13 @@ class BKPyVODESimulator(BaseSimulator):
         new_state.metadata["sirolimus_effect"] = D_sir
         new_state.metadata["nccr_variant"] = template_state.metadata.get("nccr_variant", "archetype")
 
-        # Estimated trough concentrations — the inverse of the ng/mL
-        # intensity map (assumption-labelled: D is a unit-intensity exposure
-        # at the reference trough, so D * ref_trough is an effective-concentration
-        # readout, not a measured level)
-        new_state.metadata["tacrolimus_est_ngml"] = D_tac * self.ode_system.params.get("tac_ref_trough_ngml", 8.0)
-        new_state.metadata["sirolimus_est_ngml"] = D_sir * self.ode_system.params.get("sir_ref_trough_ngml", 4.0)
+        # Estimated trough concentrations — emitted ONLY when the schedule
+        # declared real trough_ng_ml windows. Under dimensionless `target`
+        # dosing D is a unit intensity, NOT a plasma level, so no est_ngml
+        # is emitted (avoids mislabelling units on the legacy path).
+        if getattr(self, "_dosing_uses_pk", False):
+            new_state.metadata["tacrolimus_est_ngml"] = D_tac * self.ode_system.params.get("tac_ref_trough_ngml", 8.0)
+            new_state.metadata["sirolimus_est_ngml"] = D_sir * self.ode_system.params.get("sir_ref_trough_ngml", 4.0)
 
         # Adaptive T-cell arm and urinary compartment (Funk 2008)
         new_state.metadata["bkpyv_tcell_naive"] = T_naive

@@ -973,19 +973,18 @@ def st_regimen_design_page():
 
             plasma_cp = [mapper.normalized_to_copies(float(v))
                          for v in _np.maximum(sol.y[0], 1e-9)]
-            urine_cp = [mapper.normalized_to_copies(float(v))
-                        for v in _np.maximum(sol.y[19] / 20.0, 1e-9)]
             import pandas as pd
             traj = pd.DataFrame({
                 "week": sol.t / 7.0,
-                "plasma cp/mL": plasma_cp,
-                "urine cp/mL (scaled)": urine_cp,
+                "log10 plasma cp/mL": _np.log10(_np.maximum(plasma_cp, 1.0)),
+                # Model units — not a cp/mL claim (plasma-calibrated bridge
+                # cannot produce urine concentrations).
+                "log10 urine V_u": _np.log10(_np.maximum(sol.y[19], 1e-9)),
                 "T_eff": sol.y[16],
                 "F_rr": sol.y[20],
             }).set_index("week")
-            st.subheader("Plasma vs urine viral load (log scale)")
-            st.line_chart(_np.log10(traj[["plasma cp/mL",
-                                          "urine cp/mL (scaled)"]].clip(lower=0.0)))
+            st.subheader("Plasma cp/mL vs urinary V_u (log scale)")
+            st.line_chart(traj[["log10 plasma cp/mL", "log10 urine V_u"]])
             st.subheader("Immune rebound and NCCR evolution")
             st.line_chart(traj[["T_eff", "F_rr"]])
         else:
@@ -998,7 +997,8 @@ def st_regimen_design_page():
                                  "clears@week": m["clearance_weeks"],
                                  "final log10": m["final_log10_cpml"],
                                  "rebound": m["rebound_index"],
-                                 "F_rr": m["final_frr"]})
+                                 "F_rr": m["final_frr"],
+                                 "u:p ratio": m["urine_plasma_ratio"]})
             import pandas as pd
             st.subheader("Schedule sweep — the model's answer")
             st.dataframe(pd.DataFrame(rows), use_container_width=True)

@@ -509,7 +509,9 @@ def main():
     curtail_curves = {}
     for cut in (50, 80, 90):
         t_eval2 = np.linspace(0, 140, 561)
-        sol2 = simulate(y_peak, t_eval2, params={"p": 8.0 * (1.0 - cut / 100.0)})
+        sol2 = simulate(y_peak, t_eval2,
+                        params={"p": 8.0 * (1.0 - cut / 100.0),
+                                "p_u": 500.0 * (1.0 - cut / 100.0)})
         curtail_curves[cut] = {"t": sol2.t,
                                "cp": copies_trajectory(mapper, sol2.y[0])}
     try:

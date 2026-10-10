@@ -57,7 +57,7 @@ def _entry(viral_loads, scenario="infection_no_drug", nccr="archetype", timestep
 # ---------- all-page coverage ----------
 
 
-def test_all_ten_pages_render_with_expected_content():
+def test_all_pages_render_with_expected_content():
     """Every sidebar page loads with no exception and page-specific content."""
     at = _app()
     at.run()

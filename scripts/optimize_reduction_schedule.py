@@ -84,8 +84,9 @@ def evaluate_schedule(schedule, sir_trough=None, horizon=HORIZON_DAYS,
         "peak_teff": round(float(T_eff.max()), 3),
         "rebound_index": round(rebound_index, 3),
         "final_frr": round(float(F_rr[-1]), 3),
-        "final_viruria_log10": round(float(np.log10(max(
-            ViralLoadMapper().normalized_to_copies(V_u[-1] / 20.0), 1.0))), 2),
+        # Model-internal urine:plasma ratio — a well-defined quantity
+        # with no unit-conversion assumptions (Funk 2008: urine >> plasma).
+        "urine_plasma_ratio": round(float(V_u[-1] / max(V[-1], 1e-12)), 1),
         "schedule": [(s, e, tr) for s, e, tr in schedule],
         "sir_trough_ngml": sir_trough,
     }
@@ -122,7 +123,7 @@ def main():
     print("BKPyV immunosuppression-reduction schedule sweep")
     print("(mechanistic hypothesis generator — assumption-labelled, not patient-fitted)\n")
     header = (f"{'schedule':<42} {'clear@wk':>9} {'final log10':>11} "
-              f"{'peakTeff':>9} {'rebound':>8} {'F_rr':>6}")
+              f"{'peakTeff':>9} {'rebound':>8} {'F_rr':>6} {'u:p':>6}")
     print(header)
     print("-" * len(header))
     results = []
@@ -132,7 +133,8 @@ def main():
         results.append(m)
         clear = "never" if m["clearance_weeks"] is None else f"{m['clearance_weeks']:.1f}"
         print(f"{label:<42} {clear:>9} {m['final_log10_cpml']:>11} "
-              f"{m['peak_teff']:>9} {m['rebound_index']:>8} {m['final_frr']:>6}")
+              f"{m['peak_teff']:>9} {m['rebound_index']:>8} {m['final_frr']:>6} "
+              f"{m['urine_plasma_ratio']:>6}")
 
     # Pareto view: schedules that clear, ranked by lowest rebound first
     clearing = [r for r in results if r["clearance_weeks"] is not None]

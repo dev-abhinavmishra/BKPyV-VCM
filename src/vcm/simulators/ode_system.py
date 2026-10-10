@@ -13,7 +13,7 @@ The ODE system is based on standard virus-host modeling approaches extended with
 - A urinary/urothelial compartment with kidney↔bladder cross-feeding
 - Research-validated parameters from clinical studies
 
-State Variables (20-dimensional vector):
+State Variables (21-dimensional vector):
 1. V: Viral load (normalised scale; see clinical.viral_load_mapper for the bridge to copies/mL)
 2. T: Large T-antigen level (arbitrary units)
 3. G_v: Viral gene expression level (arbitrary units)
@@ -38,6 +38,9 @@ State Variables (20-dimensional vector):
 18. C_u: Healthy urothelial cells (urinary/bladder compartment, fraction)
 19. I_u: Infected urothelial cells (fraction)
 20. V_u: Urinary viral load (virions in the bladder/urine compartment)
+21. F_rr: Rearranged-NCCR fraction of the virion pool (0-1; in-host
+          quasi-species dynamics — Gosert 2008: rr-NCCR emerges under
+          sustained high viremia and marks high-load plasma)
 
 Time unit: all rate constants are PER DAY. Clinical interpretation should compare against
 weeks-scale plasma DNAemia (Funk 2006, PMID 16323135) rather than in-vitro hours.
