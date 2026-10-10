@@ -971,8 +971,10 @@ def st_regimen_design_page():
                            help="AUC(T_eff)/horizon — the model's rejection-risk proxy")
             cols[3].metric("Rearranged NCCR fraction", f"{m['final_frr']:.2f}")
 
-            plasma_cp = mapper.normalized_to_copies(_np.maximum(sol.y[0], 1e-9))
-            urine_cp = mapper.normalized_to_copies(_np.maximum(sol.y[19] / 20.0, 1e-9))
+            plasma_cp = [mapper.normalized_to_copies(float(v))
+                         for v in _np.maximum(sol.y[0], 1e-9)]
+            urine_cp = [mapper.normalized_to_copies(float(v))
+                        for v in _np.maximum(sol.y[19] / 20.0, 1e-9)]
             import pandas as pd
             traj = pd.DataFrame({
                 "week": sol.t / 7.0,
