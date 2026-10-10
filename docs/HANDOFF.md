@@ -122,7 +122,7 @@ streamlit run src/vcm/ui/streamlit_app.py        # 12 pages
   posterior median 7.0-7.2 vs truth 6.7-7.1, honest intervals.
 - generate_figures.py: 4-panel publication composite ->
   outputs/figures/composite_figure.png.
-- Suite: 219 tests / 8 skipped; benchmark PASS post-c2c and post-L.
+- Suite: 220 tests / 8 skipped; benchmark PASS post-c2c and post-L.
 - L compartment (index 22): latent_fraction 0.02 of new infections
   aborts into latency; reactivation_flux = lat_reactivation * L *
   (1 - tac_immune_effect) feeds I — mechanistic reservoir behind
@@ -131,6 +131,12 @@ streamlit run src/vcm/ui/streamlit_app.py        # 12 pages
   tac (ceiling + blocked expansion); honest negative-finding arc.
 - Streamlit "Findings" page (12th): posterior-forecast demo + onset
   explorer live; AppTest-verified (median 7.0wk CI, 6.4wk onset).
+- Real-data validation LANDED: validation_data/funk2008/ (6 digitized
+  Funk-2008 plasma series, CC BY-NC-ND, provenance in that README) +
+  scripts/fit_patient_series.py. Cohort holdout MAE 0.91 vs 1.36 log10
+  baseline; 4/6 win-or-tie. Documented limits: model plasma cap ~6
+  log10 (Pat 06119 ~7.7 unreachable), rebound timing unlearnable from
+  pre-rebound data (27447), refractory 00885.
 - RESEARCH QUEUE for next session: agnoprotein latency compartment
   (Lat state feeding reactivation_onset mechanistically — replaces
   the phenomenological hazard), Bayesian fit of the virtual cohort

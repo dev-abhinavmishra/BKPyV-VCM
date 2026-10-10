@@ -24,7 +24,7 @@ Audit date: 2026-10-05. Branch: `devin/finish-vcm`.
 
 ## What runs
 
-- `pytest tests/` — **217 tests pass** (was 184 passing before this session;
+- `pytest tests/` — **220 tests pass** (was 184 passing before this session;
   +14 new: benchmark metrics, sha256 helper, holdout split, e2e smoke).
 - `validate_bkpyv.py` — exits 0 (after fix, see below).
 - `validate_isef.py` — 4/4 pattern checks PASS, "EXCELLENT" (after fix).
@@ -94,3 +94,9 @@ Audit date: 2026-10-05. Branch: `devin/finish-vcm`.
 | tacrolimus/sirolimus clearance | in code | ASSUMPTION within published PK bounds |
 | clinical ORs (age/sex/prior tx) | 1.9/2.3/3.0 | illustrative; directions from Demey 2018 |
 | V→cp/mL bridge anchors | 0/0.02/0.2/1/3/5 → 0/1e2/1e3/1e4/1e6/1e7 | ASSUMPTION anchored on AST IDCOP 2019 + Kotton 2024 thresholds |
+
+Real-data validation (2026-10-10): 6 digitized Funk-2008
+plasma series fitted (validation_data/funk2008/); cohort
+holdout MAE 0.91 vs 1.36 log10 baseline; 4/6 beats or ties
+baseline; limits: plasma cap ~6 log (Pat 06119 ~7.7
+unreachable), refractory fluctuation (00885) unpredicted.

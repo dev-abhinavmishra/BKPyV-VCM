@@ -203,6 +203,12 @@ Mechanism notes:
   infected reservoir under deep suppression: the persistence
   channel that explains why viremia resurges after interruption.
 
+- `scripts/fit_patient_series.py` — real-data validation: fits
+  (beta, delta, pre-roll offset, intervention week, post-IS tac trough)
+  to digitized Funk-2008 plasma trajectories (validation_data/funk2008/,
+  CC BY-NC-ND); honest holdout: fit first 60% of each series, predict the
+  rest, scored vs a per-patient mean baseline. First contact of the
+  model with real patient data.
 - `scripts/tcell_therapy_simulation.py` — VST digital twin: exogenous
   T_eff bolus under maintained tacrolimus. Emergent result: transient
   dips only at ~4x homeostatic ceiling, never durable clearance —

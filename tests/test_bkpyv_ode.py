@@ -936,3 +936,20 @@ class TestNovelExtensions:
                 "sirolimus": [{"start": 28, "stop": None, "trough_ng_ml": 4.0}]}
         tc, cpc, _ = vst.simulate_with_vst(conv, 28.0, 0.0)
         assert vst._clearance_week(tc, cpc) < 12.0     # control clears
+
+    def test_patient_series_harness(self):
+        """fit_patient_series: CSVs load, simulator produces finite
+        log10 cp/mL at obs days, and a mid-range theta is sane."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent
+                               / "scripts"))
+        import fit_patient_series as fps
+        csvs = sorted(fps.DATA_DIR.glob("pat_*.csv"))
+        assert len(csvs) == 6
+        wk, y = fps.load_series(csvs[0])
+        assert wk[0] >= 0 and np.all(np.diff(wk) >= 0)
+        assert y.min() >= 1.5 and y.max() <= 8.0
+        # plausible theta: beta .5, delta .4, pre 120d, act wk 20, tac_lo 3
+        pred = fps.simulate_patient([0.5, 0.4, 120.0, 20.0, 3.0],
+                                   wk * 7.0)
+        assert pred is not None and pred.shape == y.shape
+        assert np.all(np.isfinite(pred))
