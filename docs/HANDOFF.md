@@ -98,3 +98,11 @@ streamlit run src/vcm/ui/streamlit_app.py        # 11 pages
   viral_production. Do NOT raise to 1.0 — breaks curtail_50 fidelity.
 - taper-mode paradox worth presenting: taper at ANY trigger -> MORE
   emergence than no action (prolongs selection pressure).
+
+## Novel-extensions arc (devin/novel-extensions, UNMERGED per user)
+
+- reactivation_onset.py: hazard h = 0.005 + 0.0025*(tac-3); median onset
+  6.4wk @tac8. First onset-DISTRIBUTION model.
+- early_forecast.py: 3 noisy weekly points -> (beta,delta) grid -> MAE
+  0.17wk, 0 discordance. The bedside-facing claim.
+- Next candidates: optimal-control derivation, cell-to-cell spread.

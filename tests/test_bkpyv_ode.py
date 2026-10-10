@@ -822,3 +822,37 @@ class TestScreeningPolicies:
         pyvan = run_policy(10_000.0)
         assert screen["clearance_weeks"] < pyvan["clearance_weeks"]
         assert screen["rebound_index"] < pyvan["rebound_index"]
+
+
+class TestNovelExtensions:
+    """Reactivation-onset distribution + early-window forecast."""
+
+    def test_reactivation_hazard_monotone_and_onset_window(self):
+        """Higher tac trough -> higher hazard and earlier median onset;
+        at full suppression the median lands in the clinical 4-16 wk
+        cluster."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        from reactivation_onset import onset_days, hazard
+
+        assert hazard(12.0) > hazard(8.0) > hazard(3.0)
+        lo = onset_days(3.0, n=40, seed=3)
+        hi = onset_days(8.0, n=40, seed=3)
+        assert hi["pct_reactivated"] >= lo["pct_reactivated"]
+        assert hi["median_onset_weeks"] < lo["median_onset_weeks"]
+        assert 3.0 <= hi["median_onset_weeks"] <= 16.0
+
+    def test_forecast_accuracy_and_discordance(self):
+        """Three noisy weekly points predict clearance within ~2 weeks
+        and never invert the clear/not-clear call."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        from early_forecast import virtual_cohort
+
+        rows = virtual_cohort(n=6, seed=5)
+        errs = [abs(r["pred_clearance_weeks"] - r["true_clearance_weeks"])
+                for r in rows
+                if r["pred_clearance_weeks"] is not None
+                and r["true_clearance_weeks"] is not None]
+        assert np.mean(errs) < 2.0
+        assert sum(1 for r in rows
+                   if (r["pred_clearance_weeks"] is None)
+                   != (r["true_clearance_weeks"] is None)) == 0

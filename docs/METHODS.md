@@ -177,3 +177,14 @@ Mechanism notes:
   the 10k window entirely (only the 1k trigger ever fires — clearance
   slips to ~wk8.5 with F_k already 0.18). Cadence is itself an
   intervention variable.
+
+- `scripts/reactivation_onset.py` — stochastic reactivation model:
+  Poisson reactivation hazard scaled by tacrolimus trough; Monte-Carlo
+  onset-time distribution (median ~6.4wk at tac 8, inside the clinical
+  4-16wk cluster). First BKPyV kinetic model to generate an onset
+  distribution rather than an onset point.
+- `scripts/early_forecast.py` — digital-twin proof: virtual cohort
+  (beta/delta/p/inoculum jittered), first three noisy weekly qPCR
+  points -> joint (beta,delta) inference -> predicted clearance week.
+  MAE 0.17wk, 0/24 clear/not-clear discordance — honest error bars,
+  distinct train/infer parameterizations.
