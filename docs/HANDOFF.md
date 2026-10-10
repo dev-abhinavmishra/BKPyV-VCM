@@ -133,7 +133,7 @@ streamlit run src/vcm/ui/streamlit_app.py        # 12 pages
   explorer live; AppTest-verified (median 7.0wk CI, 6.4wk onset).
 - Real-data validation LANDED: validation_data/funk2008/ (6 digitized
   Funk-2008 plasma series, CC BY-NC-ND, provenance in that README) +
-  scripts/fit_patient_series.py. Cohort holdout MAE 0.91 vs 1.36 log10
+  scripts/fit_patient_series.py. Cohort holdout MAE 0.82 vs 1.36 log10
   baseline; 4/6 win-or-tie. Documented limits: model plasma cap ~6
   log10 (Pat 06119 ~7.7 unreachable), rebound timing unlearnable from
   pre-rebound data (27447), refractory 00885.

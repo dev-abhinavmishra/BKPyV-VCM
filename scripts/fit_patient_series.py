@@ -48,8 +48,10 @@ def _log_cp(v_arr):
 
 
 def load_series(path):
+    """Return (weeks post-transplant, log10 cp/mL) as stored in the CSV.
+    Callers convert weeks -> days exactly once (x7) where needed."""
     df = pd.read_csv(path)
-    return df["week"].to_numpy() * 7.0, df["plasma_log10_cp_ml"].to_numpy()
+    return df["week"].to_numpy(), df["plasma_log10_cp_ml"].to_numpy()
 
 
 def simulate_patient(theta, obs_days):

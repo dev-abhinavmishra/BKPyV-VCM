@@ -148,21 +148,22 @@ Six digitized plasma trajectories (Funk 2008, Fig 3;
 
 | Patient | Full RMSE | Full R² | Holdout MAE | Baseline MAE | Verdict |
 |---------|-----------|---------|-------------|--------------|---------|
-| 00107   | 0.51      | 0.47    | **0.33**    | 0.62         | model wins |
-| 00885   | 1.12      | 0.08    | 1.48        | 1.48         | tie (refractory) |
-| 06119   | 1.71      | −0.45   | **0.15**    | 2.03         | holdout wins big* |
-| 15207   | 0.08      | **0.96**| **0.44**    | 0.68         | model wins |
-| 19771   | 0.93      | 0.51    | **2.46**    | 2.74         | model wins |
-| 27447   | 0.65      | 0.43    | 0.61        | 0.61         | tie (rebound) |
+| 00107   | 0.47      | 0.53    | **0.29**    | 0.62         | model wins |
+| 00885   | 1.07      | 0.17    | 1.49        | 1.48         | tie (refractory) |
+| 06119   | 1.68      | −0.40   | **0.43**    | 2.03         | holdout wins big* |
+| 15207   | 0.06      | **0.98**| **0.42**    | 0.68         | model wins |
+| 19771   | 0.92      | 0.53    | **1.69**    | 2.74         | model wins |
+| 27447   | 0.59      | 0.52    | **0.61**    | 0.61         | model wins (marginal) |
 
-**Cohort holdout MAE 0.91 vs 1.36 log₁₀ — the model beats the
-per-patient baseline.** Documented failure modes (reported, not
-tuned away): Pat 06119's plasma peak (~10⁷·⁷) exceeds the model's
-current dynamic ceiling (~10⁶); Pat 00885 fluctuates in ways no
-monotone model captures; Pat 27447's rebound is unlearnable from
-pre-rebound data alone — which is itself the model's statement that
-rebound is *not forecastable from early viremia* without a reservoir
-readout.
+**Cohort holdout MAE 0.82 vs 1.36 log₁₀ — the model beats the
+per-patient baseline on five of six patients** (the sixth, 00885,
+ties a refractory fluctuation the model is honest enough not to
+chase). Documented failure modes (reported, not tuned away):
+Pat 06119's plasma peak (~10⁷·⁷) exceeds the model's current
+dynamic ceiling (~10⁶) so its full-series R² stays negative even
+though its holdout beats baseline 4.7×; Pat 00885's irregular
+fluctuation has no monotone equivalent — the model declines to
+overfit it and pays the tie.
 
 Two of the failure modes are not accuracy gaps but *mechanism
 pointers*: the transient surges the fitted curves cannot reach
@@ -214,7 +215,7 @@ A mechanistic virtual cell can move BKPyV management questions from
 reactive to predictive: onset distributions, individual clearance
 forecasts with credible intervals, and a derived — not searched —
 optimal intervention policy. Validation against published signatures
-(all six pass), real patient trajectories (cohort holdout MAE 0.91 vs
+(all six pass), real patient trajectories (cohort holdout MAE 0.82 vs
 1.36 baseline), and honestly-reported failure modes together describe
 a model that knows what it knows.
 

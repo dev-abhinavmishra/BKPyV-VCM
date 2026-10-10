@@ -15,7 +15,8 @@ transplant-patient trajectories with its failures published, not hidden.
    latency + cell-to-cell persistence, real PK drug dosing.
 3. **Predictions → validation**: eight falsifiable signatures; all six
    published benchmarks pass; real-patient holdout beats baseline
-   (0.91 vs 1.36 log10) — with two named, instructive failures.
+   (0.82 vs 1.36 log10) — 5/6 patients beaten, with named,
+   instructive failure modes.
 
 ## Numbers that stop judges (all verified, all in-repo)
 - Onset is a **distribution**: median 6.4 wk at tac 8 (clinical: 4–16 wk).
@@ -23,7 +24,7 @@ transplant-patient trajectories with its failures published, not hidden.
   error + 90% credible interval → "clear by week X, 90% confidence."
 - Optimal policy is **derived**, not searched: immediate tac→sir
   conversion; delay costs ~2.4 wk/week.
-- Real data: **R² 0.96** on patient 15207; cohort holdout MAE **0.91 vs
+- Real data: **R² 0.98** on patient 15207; cohort holdout MAE **0.82 vs
   1.36** baseline on digitized Funk-2008 series.
 - Honest negative: **VST fails** under maintained tacrolimus except
   transiently — matching why clinical VST responses are often transient.

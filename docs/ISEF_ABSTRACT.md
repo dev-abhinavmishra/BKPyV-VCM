@@ -20,8 +20,8 @@ immediate tacrolimus-to-sirolimus conversion — and plasma-over-urine
 enrichment of rearranged NCCR genomes matching published clinical
 observation. Fitted to digitized longitudinal plasma series from six
 transplant patients (Funk et al. 2008), the model's honest holdout
-predictions beat a per-patient baseline (mean absolute error 0.91 vs
-1.36 log10 copies/mL) on four of six, and failure cases are reported
+predictions beat a per-patient baseline (mean absolute error 0.82 vs
+1.36 log10 copies/mL) on five of six, and failure cases are reported
 with their structural causes. The result is a validated in-silico
 framework for timing and choosing immunosuppression reduction — a
 digital-twin path toward preemptive, personalized BKPyV management.

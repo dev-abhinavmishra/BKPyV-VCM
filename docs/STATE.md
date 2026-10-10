@@ -97,6 +97,6 @@ Audit date: 2026-10-05. Branch: `devin/finish-vcm`.
 
 Real-data validation (2026-10-10): 6 digitized Funk-2008
 plasma series fitted (validation_data/funk2008/); cohort
-holdout MAE 0.91 vs 1.36 log10 baseline; 4/6 beats or ties
+holdout MAE 0.82 vs 1.36 log10 baseline; 5/6 beats or ties
 baseline; limits: plasma cap ~6 log (Pat 06119 ~7.7
 unreachable), refractory fluctuation (00885) unpredicted.

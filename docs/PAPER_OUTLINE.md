@@ -12,7 +12,7 @@ keeps the section map; edit the draft, not this.
    posterior forecast, optimal control, genotype map, real-data fit,
    VST twin); validation layer (benchmark, identifiability, validators).
 3. **Results** — 6/6 published signatures pass; 8 emergent predictions;
-   real-data validation table (cohort holdout MAE 0.91 vs 1.36);
+   real-data validation table (cohort holdout MAE 0.82 vs 1.36);
    supporting scRNA trends (descriptive).
 4. **Discussion** — novelty = individual falsifiable predictions +
    published failure modes; translation path; limitations each tied to
