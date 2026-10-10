@@ -429,13 +429,14 @@ class BKPyVODESimulator(BaseSimulator):
         y0[7] = dna  # DNA
         y0[13] = p_rep  # P_rep
         y0[14] = p_immune  # P_immune
-        # Variant presets are overridable for calibration/sensitivity work.
-        # This makes it possible to distinguish a biological scenario from a
-        # fitted coefficient instead of silently overwriting the coefficient.
-        if "nccr_early_expression_multiplier" not in self.config:
-            self.ode_system.params["nccr_early_expression_multiplier"] = 2.0 if nccr_variant == "rearranged" else 1.0
-        if "nccr_capsid_expression_multiplier" not in self.config:
-            self.ode_system.params["nccr_capsid_expression_multiplier"] = 0.5 if nccr_variant == "rearranged" else 1.0
+        # Variant presets now seed the NCCR quasi-species state instead of
+        # pinning static multipliers: archetype starts F_rr=0, rearranged
+        # F_rr=1 — the two boundary conditions of the in-host emergence
+        # dynamics in ``ode_system``. Explicit ``nccr_*_expression_multiplier``
+        # config overrides remain the F_rr=0 endpoint (archetype baseline)
+        # so calibration/sensitivity work is unaffected.
+        if len(y0) > 20:
+            y0[20] = 1.0 if nccr_variant == "rearranged" else 0.0
         
         return y0
     
@@ -459,6 +460,7 @@ class BKPyVODESimulator(BaseSimulator):
         C_u = float(y[17]) if len(y) > 17 else 1.0
         I_u = float(y[18]) if len(y) > 18 else 0.0
         V_u = float(y[19]) if len(y) > 19 else 0.0
+        F_rr = float(y[20]) if len(y) > 20 else 0.0
         
         # Create new state based on template
         new_state = copy.deepcopy(template_state)
@@ -467,7 +469,7 @@ class BKPyVODESimulator(BaseSimulator):
         # Update viral genes
         new_state.genes["viral_LT"].expression_level = T
         new_state.genes["viral_ST"].expression_level = G_v * 0.6
-        capsid_multiplier = self.ode_system.params.get("nccr_capsid_expression_multiplier", 1.0)
+        _early_eff, capsid_multiplier = self.ode_system._nccr_multipliers(F_rr)
         new_state.genes["viral_VP1"].expression_level = G_v * 0.3 * capsid_multiplier
         new_state.genes["viral_VP2"].expression_level = G_v * 0.05
         new_state.genes["viral_VP3"].expression_level = G_v * 0.05
@@ -539,6 +541,7 @@ class BKPyVODESimulator(BaseSimulator):
         new_state.metadata["urothelial_healthy_cells"] = C_u
         new_state.metadata["urothelial_infected_cells"] = I_u
         new_state.metadata["urine_viral_load"] = max(0.0, V_u)
+        new_state.metadata["nccr_rearranged_fraction"] = F_rr
         new_state.metadata["intracellular_replication_flux"] = float(max(0.0, V * (T / (T + 0.5))))
         new_state.metadata["viral_production_rate"] = float(max(0.0, P_rep * T))
         new_state.metadata["immune_control_index"] = float(max(0.0, min(1.0, P_immune)))

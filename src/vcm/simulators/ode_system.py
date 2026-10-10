@@ -117,8 +117,22 @@ class BKPyVODESystem:
             't_prod': 0.2,        # T antigen production rate (1/day)
             't_decay': 0.1,       # T antigen decay rate (1/day)
             't_threshold': 0.5,   # T antigen threshold separating early/late behaviour
-            'nccr_early_expression_multiplier': 1.0,  # Archetype baseline; rearranged is a scenario
-            'nccr_capsid_expression_multiplier': 1.0,  # Kept separate to expose the NCCR trade-off
+            'nccr_early_expression_multiplier': 1.0,  # Archetype baseline (F_rr=0 endpoint)
+            'nccr_capsid_expression_multiplier': 1.0,  # Archetype baseline (F_rr=0 endpoint)
+
+            # NCCR quasi-species dynamics (Gosert 2008; Broekema 2021):
+            # archetype is the transmitted/persistent form; rearranged NCCR
+            # variants emerge in vivo under sustained replication and
+            # outcompete (early-gene overexpression -> faster genome
+            # copying). F_rr is the rearranged fraction of the virion pool;
+            # the discrete archetype/rearranged presets are the F=0/F=1
+            # boundary conditions of this dynamics.
+            'rr_early_gain': 2.0,          # Early-gene expression at F_rr=1 (2x archetype)
+            'rr_capsid_fraction': 0.5,     # Capsid expression at F_rr=1 (0.5x archetype)
+            'nccr_emergence_rate': 0.01,   # Rearrangement supply per unit replication (1/day)
+            'nccr_selection_rate': 0.8,    # Competitive advantage of rr under replication (1/day)
+            'nccr_reversion_rate': 0.0005, # Slow drift back toward archetype (1/day)
+            'nccr_emergence_enabled': 1.0, # 0 restores the fixed-genotype model
 
             # Viral gene expression
             'g_prod': 0.15,        # Viral gene production rate (1/day)
@@ -268,6 +282,7 @@ class BKPyVODESystem:
             'C_u',     # Healthy urothelial cells
             'I_u',     # Infected urothelial cells
             'V_u',     # Urinary viral load
+            'F_rr',    # Rearranged-NCCR fraction of the virion pool
         ]
     
     def ode_system(self, t: float, y: np.ndarray,
@@ -277,7 +292,7 @@ class BKPyVODESystem:
         Args:
             t: Current time (days)
             y: State vector [V, T, G_v, C, I, D, CC, DNA, E, IFN, AK, D_tac,
-               D_sir, P_rep, P_immune, T_naive, T_eff, C_u, I_u, V_u]
+               D_sir, P_rep, P_immune, T_naive, T_eff, C_u, I_u, V_u, F_rr]
             dosing_context: Optional dict describing drug administration:
                 {'tacrolimus': {'start': float, 'stop': float|None,
                                 'target': float | 'trough_ng_ml': float} | [ ... ],
@@ -303,6 +318,7 @@ class BKPyVODESystem:
         # appended adaptive-T-cell and urothelial compartments)
         V, T, G_v, C, I, D, CC, DNA, E, IFN, AK, D_tac, D_sir, P_rep, P_immune = y[:15]
         T_naive, T_eff, C_u, I_u, V_u = y[15:20]
+        F_rr = float(y[20]) if len(y) > 20 else 0.0
 
         p = self.params
 
@@ -328,6 +344,7 @@ class BKPyVODESystem:
         C_u = max(0.0, C_u)
         I_u = max(0.0, I_u)
         V_u = max(0.0, V_u)
+        F_rr = min(1.0, max(0.0, F_rr))
 
         # --- Drug administration -------------------------------------------
         # Continuous dosing: while within [start, stop) the intensity relaxes
@@ -422,10 +439,15 @@ class BKPyVODESystem:
         t_decay = p['t_decay'] * T
         dTdt = t_production - t_decay
 
-        # dG_v/dt: Viral gene expression (saturating to keep G_v finite)
+        # dG_v/dt: Viral gene expression (saturating to keep G_v finite).
+        # The early-gene multiplier is F_rr-weighted: as the rearranged
+        # fraction grows, early-gene expression approaches rr_early_gain x
+        # the archetype baseline (Gosert 2008: rr-NCCR overexpresses early
+        # genes).
+        nccr_early_eff, nccr_capsid_eff = self._nccr_multipliers(F_rr)
         g_production = (
             p['g_prod'] * V * p['translation_enhancement']
-            * p['nccr_early_expression_multiplier'] / (1.0 + G_v)
+            * nccr_early_eff / (1.0 + G_v)
         )
         g_decay = p['g_decay'] * G_v
         dG_vdt = g_production - g_decay
@@ -543,9 +565,24 @@ class BKPyVODESystem:
         # loads exceed plasma by orders of magnitude (>95% urothelial origin).
         dV_udt = p['p_u'] * I_u + p['drain_kidney'] * V - p['delta_u'] * V_u
 
+        # --- NCCR quasi-species dynamics ------------------------------------
+        # Rearranged variants arise in proportion to replication activity
+        # (mutation supply) and are competitively favoured by it (their
+        # early-gene overexpression copies genomes faster); slow reversion
+        # toward archetype. F_rr therefore stays ~0 in quiescent infection
+        # and rises toward 1 under sustained high viremia — the observed
+        # clinical pattern (rr-NCCR marks high-load plasma).
+        replication_pressure = I * (T / (T + p['half_saturation']))
+        if p['nccr_emergence_enabled'] >= 0.5:
+            dF_rrdt = (p['nccr_emergence_rate'] * replication_pressure * (1.0 - F_rr)
+                       + p['nccr_selection_rate'] * replication_pressure * F_rr * (1.0 - F_rr)
+                       - p['nccr_reversion_rate'] * F_rr)
+        else:
+            dF_rrdt = 0.0
+
         return np.array([dVdt, dTdt, dG_vdt, dCdt, dIdt, dDdt, dCCdt, dDNAdt,
                         dEdt, dIFNdt, dAKdt, dD_tacdt, dD_sirdt, dP_repdt, dP_immunedt,
-                        dT_naivedt, dT_effdt, dC_udt, dI_udt, dV_udt])
+                        dT_naivedt, dT_effdt, dC_udt, dI_udt, dV_udt, dF_rrdt])
     
     def get_initial_conditions(self, cell_count: float = 1.0) -> np.ndarray:
         """Get initial conditions for the ODE system.
@@ -577,6 +614,7 @@ class BKPyVODESystem:
             1.0,          # C_u: full urothelial compartment
             0.0,          # I_u: no urothelial infection
             0.0,          # V_u: no urinary viral load
+            0.0,          # F_rr: archetype NCCR at transmission
         ])
     
     def get_infection_conditions(self, viral_load: float = 0.5) -> np.ndarray:
@@ -595,3 +633,17 @@ class BKPyVODESystem:
         y0[1] = 0.3  # Initial T antigen
         y0[3] -= y0[4]  # Reduce healthy cells
         return y0
+
+    def _nccr_multipliers(self, F_rr: float) -> tuple:
+        """Effective early-gene and capsid expression multipliers at a given
+        rearranged fraction. The configured ``nccr_*_multiplier`` params are
+        the F_rr=0 (archetype) endpoints; F_rr=1 approaches ``rr_early_gain``x
+        early expression and ``rr_capsid_fraction``x capsid expression
+        (Gosert 2008: rr-NCCR overexpresses early genes ~2x, capsid ~0.5x).
+        """
+        p = self.params
+        early = p['nccr_early_expression_multiplier'] * (
+            1.0 + F_rr * (p['rr_early_gain'] - 1.0))
+        capsid = p['nccr_capsid_expression_multiplier'] * (
+            1.0 - F_rr * (1.0 - p['rr_capsid_fraction']))
+        return early, capsid

@@ -33,7 +33,7 @@ class TestBKPyVODESystem:
         """Test that state vector names are correctly defined."""
         ode_system = BKPyVODESystem()
         names = ode_system.get_state_vector_names()
-        assert len(names) == 20
+        assert len(names) == 21
         assert 'V' in names  # Viral load
         assert 'T' in names  # T antigen
         assert 'C' in names  # Healthy cells
@@ -680,3 +680,67 @@ class TestPharmacokineticDosing:
         assert ctx["tacrolimus"][0]["trough_ng_ml"] == 8.0
         assert ctx["tacrolimus"][1]["trough_ng_ml"] == 4.0
         assert ctx["tacrolimus"][0]["stop"] == 42.0
+
+
+class TestNCCREmergence:
+    """F_rr quasi-species dynamics: rearranged NCCR emerges under
+    sustained replication (Gosert 2008)."""
+
+    def test_state_vector_is_21d_with_frr_last(self):
+        names = BKPyVODESystem().get_state_vector_names()
+        assert names[-1] == 'F_rr'
+        assert len(BKPyVODESystem().get_initial_conditions()) == len(names)
+
+    def test_frr_emerges_under_sustained_viremia(self):
+        """An archetype inoculum evolves a substantial rearranged fraction
+        over the weeks-months window reported clinically."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y, None),
+            (0, 120), y0, t_eval=np.linspace(0, 120, 121), method='LSODA',
+        )
+        f_rr = sol.y[20]
+        assert f_rr[0] == pytest.approx(0.0)
+        assert np.all((f_rr >= 0.0) & (f_rr <= 1.0))
+        assert f_rr[-1] > 0.5
+
+    def test_rearranged_preset_seeds_f1(self):
+        """nccr_variant='rearranged' maps onto the F_rr=1 boundary instead
+        of pinning static multipliers."""
+        sim = BKPyVODESimulator()
+        plugin = BKPolyomavirusPlugin()
+        cell = plugin.create_initial_state({"nccr_variant": "rearranged"})
+        y0 = sim._cellstate_to_ode(cell)
+        assert y0[20] == pytest.approx(1.0)
+        early, capsid = sim.ode_system._nccr_multipliers(1.0)
+        assert early == pytest.approx(2.0)
+        assert capsid == pytest.approx(0.5)
+
+    def test_emergence_can_be_disabled(self):
+        """nccr_emergence_enabled=0 restores the fixed-genotype model."""
+        ode_system = BKPyVODESystem()
+        ode_system.params['nccr_emergence_enabled'] = 0.0
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y, None),
+            (0, 60), y0, t_eval=[60], method='LSODA',
+        )
+        assert sol.y[20, -1] == pytest.approx(0.0)
+
+    def test_strong_suppression_slows_emergence(self):
+        """Under heavy immunosuppression-driven curtailment the rearranged
+        fraction stays much lower than in untreated infection."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        sol_on = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y, None),
+            (0, 90), y0, t_eval=[90], method='LSODA',
+        )
+        ode_curtailed = BKPyVODESystem()
+        ode_curtailed.params.update({'p': 8.0 * 0.1, 'p_u': 500.0 * 0.1})
+        sol_off = solve_ivp(
+            lambda t, y: ode_curtailed.ode_system(t, y, None),
+            (0, 90), y0, t_eval=[90], method='LSODA',
+        )
+        assert sol_off.y[20, -1] < sol_on.y[20, -1] * 0.5
