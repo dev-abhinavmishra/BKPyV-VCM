@@ -1,5 +1,8 @@
 """Tests for ODE-based BKPyV simulator and ODE system."""
 
+import sys
+from pathlib import Path
+
 import pytest
 import numpy as np
 from scipy.integrate import solve_ivp
@@ -744,3 +747,37 @@ class TestNCCREmergence:
             (0, 90), y0, t_eval=[90], method='LSODA',
         )
         assert sol_off.y[20, -1] < sol_on.y[20, -1] * 0.5
+
+
+class TestReductionSchedules:
+    """The model's headline clinical finding: tac->sir conversion should
+    dominate tac tapering on BOTH viral clearance and immune rebound."""
+
+    def test_sir_conversion_clears_viremia(self):
+        """Conversion to sirolimus clears plasma viremia below the Kotton
+        screening threshold within the horizon; tapering to 3 ng/mL tac
+        does not."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        from optimize_reduction_schedule import evaluate_schedule
+
+        taper = evaluate_schedule([(0.0, 28.0, 8.0), (28.0, None, 3.0)])
+        conversion = evaluate_schedule([(0.0, 28.0, 8.0), (28.0, None, 3.0)],
+                                       sir_trough=4.0)
+        assert taper["clearance_weeks"] is None
+        assert conversion["clearance_weeks"] is not None
+        assert conversion["clearance_weeks"] <= 16.0
+        # The winning schedule also rebounds LESS — sir hits replication
+        # permissiveness, not just the T-cell brake.
+        assert conversion["rebound_index"] < taper["rebound_index"]
+
+    def test_frr_tracks_replication_pressure(self):
+        """Schedules that fail to clear leave the virion pool dominated by
+        rearranged NCCR; conversion suppresses emergence."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        from optimize_reduction_schedule import evaluate_schedule
+
+        hold = evaluate_schedule([(0.0, None, 8.0)])
+        conversion = evaluate_schedule([(0.0, 28.0, 8.0), (28.0, None, 3.0)],
+                                       sir_trough=4.0)
+        assert hold["final_frr"] > 0.8
+        assert conversion["final_frr"] < hold["final_frr"]
