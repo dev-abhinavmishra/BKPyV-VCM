@@ -12,7 +12,7 @@ Audit date: 2026-10-05. Branch: `devin/finish-vcm`.
 | Plugin/parameters | `src/vcm/plugins/transplant/bk_polyomavirus/` | Working |
 | Clinical bridge | `src/vcm/clinical/viral_load_mapper.py` | Working — assumption-labelled V→cp/mL anchors |
 | Risk prediction | `src/vcm/clinical/risk_prediction.py` | Working — illustrative ORs, not fitted |
-| Dashboard | `src/vcm/ui/streamlit_app.py` | Working — 11 pages (+💉 Regimen Design) |
+| Dashboard | `src/vcm/ui/streamlit_app.py` | Working — 12 pages (+💉 Regimen Design, +🏆 Findings) |
 | Review bundle | `src/vcm/viz/bkpyv_review.py` | Working |
 | GSE317012 biopsy pipeline | `scripts/analyze_gse317012.py` | Working — 26 samples, pathway scores |
 | GSE317012 cell-level pipeline | `scripts/cluster_gse317012.py` | **Added this session** — QC/cluster/DE/holdout |
@@ -28,7 +28,7 @@ Audit date: 2026-10-05. Branch: `devin/finish-vcm`.
   +14 new: benchmark metrics, sha256 helper, holdout split, e2e smoke).
 - `validate_bkpyv.py` — exits 0 (after fix, see below).
 - `validate_isef.py` — 4/4 pattern checks PASS, "EXCELLENT" (after fix).
-- `streamlit run src/vcm/ui/streamlit_app.py` — launches, all 10 pages render
+- `streamlit run src/vcm/ui/streamlit_app.py` — launches, all 12 pages render
   (verified in browser and via `AppTest`).
 - `scripts/benchmark_viral_load.py` — overall PASS (see docs/METHODS.md).
 

@@ -45,8 +45,12 @@ def hazard(tac_ngml):
     return H_BASE + H_PER_NGML * max(0.0, tac_ngml - 3.0)
 
 
-def onset_days(tac_ngml, n=400, seed=7, horizon=H_MAX):
-    """Monte-Carlo onset distribution at a constant tacrolimus trough."""
+def onset_days(tac_ngml, n=400, seed=7, horizon=H_MAX, return_draws=False):
+    """Monte-Carlo onset distribution at a constant tacrolimus trough.
+
+    With ``return_draws`` the result also carries ``onset_weeks`` — the
+    per-draw onset times in weeks (inf = no onset within horizon) for
+    histogram display."""
     rng = np.random.default_rng(seed)
     mapper = ViralLoadMapper()
     h = hazard(tac_ngml)
@@ -69,7 +73,7 @@ def onset_days(tac_ngml, n=400, seed=7, horizon=H_MAX):
         onsets.append(float(crossed[0]) if len(crossed) else np.inf)
     onsets = np.asarray(onsets)
     finite = onsets[np.isfinite(onsets)]
-    return {
+    result = {
         "tac_ngml": tac_ngml,
         "hazard_per_day": round(h, 4),
         "pct_reactivated": round(100.0 * len(finite) / n, 1),
@@ -80,6 +84,9 @@ def onset_days(tac_ngml, n=400, seed=7, horizon=H_MAX):
         "p90_weeks": (None if not len(finite)
                       else round(float(np.percentile(finite, 90)) / 7.0, 1)),
     }
+    if return_draws:
+        result["onset_weeks"] = (onsets / 7.0).tolist()
+    return result
 
 
 def main():

@@ -55,7 +55,7 @@ Streamlit page; 208 tests green.
 .venv/bin/python scripts/benchmark_viral_load.py --quick   # OVERALL: PASS
 .venv/bin/python scripts/optimize_reduction_schedule.py    # regimen table
 .venv/bin/python scripts/identifiability_analysis.py       # sensitivity ranks
-streamlit run src/vcm/ui/streamlit_app.py        # 11 pages
+streamlit run src/vcm/ui/streamlit_app.py        # 12 pages
 ```
 
 ## What's next (highest value first)
