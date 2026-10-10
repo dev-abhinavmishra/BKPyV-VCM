@@ -13,7 +13,7 @@ The ODE system is based on standard virus-host modeling approaches extended with
 - A urinary/urothelial compartment with kidney↔bladder cross-feeding
 - Research-validated parameters from clinical studies
 
-State Variables (22-dimensional vector):
+State Variables (23-dimensional vector):
 1. V: Viral load (normalised scale; see clinical.viral_load_mapper for the bridge to copies/mL)
 2. T: Large T-antigen level (arbitrary units)
 3. G_v: Viral gene expression level (arbitrary units)
@@ -46,6 +46,13 @@ State Variables (22-dimensional vector):
           than S-phase-coupled, so the rr early-gene advantage is weakened
           (rr enrichment is a plasma signature, not a urine one — Gosert
           2008: ~22% plasma vs ~4% urine).
+23. L: Latently-infected cell reservoir (fraction). A small share of new
+          infections aborts into latency (nonproductive, non-cytopathic);
+          immunosuppression releases them back into productive infection
+          (reactivation_flux scales with 1 - tac_immune_effect). This is
+          the mechanistic reservoir behind scripts/reactivation_onset.py's
+          phenomenological hazard and the biological reason viremia
+          resurges when immunosuppression is interrupted mid-clearance.
 
 Time unit: all rate constants are PER DAY. Clinical interpretation should compare against
 weeks-scale plasma DNAemia (Funk 2006, PMID 16323135) rather than in-vitro hours.
@@ -114,6 +121,14 @@ class BKPyVODESystem:
                                    # contact spread, V-independent (virological
                                    # synapse): antibody/extracellular-clearance
                                    # insensitive, reservoir-persistence channel
+            'latent_fraction': 0.02,  # Share of new infections that abort into
+                                      # latency (L) instead of productive
+                                      # infection — small by design (reservoir
+                                      # seeding, not primary driver)
+            'lat_decay': 0.002,    # Latent-cell loss rate (1/day): slow turnover
+            'lat_reactivation': 0.005,  # Max reactivation rate (1/day) under
+                                        # full immunosuppression (scaled by
+                                        # 1 - tac_immune_effect)
             'delta': 0.4,          # Viral clearance rate (1/day) ≈ t1/2 1.7 d; within
                                    # the range reported after intervention change by
                                    # Funk 2006 (t1/2 6h-17d). NOT the 1-2h
@@ -306,6 +321,7 @@ class BKPyVODESystem:
             'V_u',     # Urinary viral load
             'F_rr',    # Rearranged-NCCR fraction of the kidney virion pool
             'F_rr_u',  # Rearranged-NCCR fraction of the urinary pool
+            'L',       # Latently-infected reservoir
         ]
     
     def ode_system(self, t: float, y: np.ndarray,
@@ -344,6 +360,7 @@ class BKPyVODESystem:
         T_naive, T_eff, C_u, I_u, V_u = y[15:20]
         F_rr = float(y[20]) if len(y) > 20 else 0.0
         F_rr_u = float(y[21]) if len(y) > 21 else 0.0
+        L = float(y[22]) if len(y) > 22 else 0.0
 
         p = self.params
 
@@ -371,6 +388,7 @@ class BKPyVODESystem:
         V_u = max(0.0, V_u)
         F_rr = min(1.0, max(0.0, F_rr))
         F_rr_u = min(1.0, max(0.0, F_rr_u))
+        L = max(0.0, L)
 
         # --- Drug administration -------------------------------------------
         # Continuous dosing: while within [start, stop) the intensity relaxes
@@ -512,11 +530,21 @@ class BKPyVODESystem:
         # BKPyV-specific CTL killing by T_eff. The T-cell hit itself is NOT
         # attenuated by tacrolimus — calcineurin blockade acts on priming and
         # expansion (below), not on the cytolytic synapse.
-        infected_gain = infection_rate
+        # Latency split: a small fraction of new infections aborts into the
+        # nonproductive reservoir L instead of becoming productively
+        # infected. The reservoir drains back through reactivation, gated
+        # by immunosuppression (1 - tac_immune_effect): full immune control
+        # holds latency silent, calcineurin blockade releases it.
+        reactivation_flux = (p['lat_reactivation'] * L
+                             * (1.0 - tac_immune_effect))
+        infected_gain = ((1.0 - p['latent_fraction']) * infection_rate
+                         + reactivation_flux)
         infected_death = (p['d_infected'] * I
                           + p['immune_kill'] * E * I * tac_immune_effect
                           + p['tcell_kill'] * T_eff * I)
         dIdt = infected_gain - infected_death
+        dLdt = (p['latent_fraction'] * infection_rate
+                - reactivation_flux - p['lat_decay'] * L)
 
         # dD/dt: dead/damaged cells accumulate and clear slowly
         dDdt = cell_death + infected_death - 0.1 * D
@@ -641,7 +669,7 @@ class BKPyVODESystem:
         return np.array([dVdt, dTdt, dG_vdt, dCdt, dIdt, dDdt, dCCdt, dDNAdt,
                         dEdt, dIFNdt, dAKdt, dD_tacdt, dD_sirdt, dP_repdt, dP_immunedt,
                         dT_naivedt, dT_effdt, dC_udt, dI_udt, dV_udt, dF_rrdt,
-                        dF_rr_udt])
+                        dF_rr_udt, dLdt])
     
     def get_initial_conditions(self, cell_count: float = 1.0) -> np.ndarray:
         """Get initial conditions for the ODE system.
@@ -675,6 +703,7 @@ class BKPyVODESystem:
             0.0,          # V_u: no urinary viral load
             0.0,          # F_rr: archetype NCCR at transmission (kidney)
             0.0,          # F_rr_u: archetype NCCR at transmission (urinary)
+            0.0,          # L: no latent reservoir at baseline
         ])
     
     def get_infection_conditions(self, viral_load: float = 0.5) -> np.ndarray:

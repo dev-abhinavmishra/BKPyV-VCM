@@ -2,7 +2,7 @@
 
 ## 1. Model — bkpyv_ode (canonical engine)
 
-22-dimensional ODE, per-day rates, `src/vcm/simulators/ode_system.py`,
+23-dimensional ODE, per-day rates, `src/vcm/simulators/ode_system.py`,
 integrated with `scipy.integrate.solve_ivp` (LSODA).
 
 State: V (free virions), T (intracellular T-antigen), G_v (replication-
@@ -109,7 +109,7 @@ outputs byte-identically up to numeric noise in UMAP.
 
 ## 6. Multi-compartment extension (Phase 3, October 2026)
 
-The canonical engine was extended from 15 to **22 state variables**
+The canonical engine was extended from 15 to **23 state variables**
 (indices appended — never renumbered — so all legacy consumers keep
 working):
 
@@ -122,6 +122,7 @@ working):
 | 19 | V_u | urinary virion pool | urine:plasma ~3000:1 (Funk 2008) |
 | 20 | F_rr | rr-NCCR fraction, KIDNEY pool | Gosert 2008 |
 | 21 | F_rr_u | rr-NCCR fraction, URINARY pool | shedding-driven selection (weakened: uro_rr_advantage 0.15) + kidney-drainage mixing |
+| 22 | L | Latently-infected reservoir | latent_fraction of new infections aborts in; reactivation_flux ~ (1 - tac_immune_effect) feeds I |
 
 Mechanism notes:
 

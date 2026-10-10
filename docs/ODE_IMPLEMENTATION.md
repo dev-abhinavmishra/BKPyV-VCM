@@ -15,7 +15,7 @@ This document describes the ODE (Ordinary Differential Equation) based implement
 ### Components
 
 1. **ODE System Definition** (`src/vcm/simulators/ode_system.py`)
-   - Defines the 22-dimensional state vector and differential equations
+   - Defines the 23-dimensional state vector and differential equations
    - Implements research-validated parameters
    - Provides initial conditions and state variable management
 
@@ -32,7 +32,7 @@ This document describes the ODE (Ordinary Differential Equation) based implement
 
 ## State Variables
 
-The ODE system uses 22 state variables (15 core + 7 appended extensions;
+The ODE system uses 23 state variables (15 core + 8 appended extensions;
 indices never renumbered — new states append only):
 
 | Index | Variable | Description | Biological Meaning |
@@ -59,6 +59,7 @@ indices never renumbered — new states append only):
 | 19 | V_u | Urinary virion pool | urine:plasma ~3000:1 |
 | 20 | F_rr | rr-NCCR fraction, kidney pool | In-host quasi-species emergence (Gosert 2008) |
 | 21 | F_rr_u | rr-NCCR fraction, urinary pool | Weakened selection + drainage mixing |
+| 22 | L | Latently-infected reservoir | Seeded by latent_fraction of new infections; reactivates under immunosuppression (1 - tac_immune_effect) |
 
 ## Differential Equations (v2 form, matching `ode_system.py`)
 

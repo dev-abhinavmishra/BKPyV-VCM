@@ -36,8 +36,9 @@ class TestBKPyVODESystem:
         """Test that state vector names are correctly defined."""
         ode_system = BKPyVODESystem()
         names = ode_system.get_state_vector_names()
-        assert len(names) == 22
+        assert len(names) == 23
         assert 'V' in names  # Viral load
+        assert 'L' in names  # Latent reservoir
         assert 'T' in names  # T antigen
         assert 'C' in names  # Healthy cells
         assert 'I' in names  # Infected cells
@@ -687,10 +688,11 @@ class TestNCCREmergence:
     """F_rr quasi-species dynamics: rearranged NCCR emerges under
     sustained replication (Gosert 2008)."""
 
-    def test_state_vector_is_21d_with_frr_last(self):
+    def test_state_vector_is_23d_with_frr_and_l(self):
         names = BKPyVODESystem().get_state_vector_names()
-        assert names[-2] == 'F_rr'
-        assert names[-1] == 'F_rr_u'
+        assert names[20] == 'F_rr'
+        assert names[21] == 'F_rr_u'
+        assert names[22] == 'L'
         assert len(BKPyVODESystem().get_initial_conditions()) == len(names)
 
     def test_frr_emerges_under_sustained_viremia(self):
@@ -898,3 +900,20 @@ class TestNovelExtensions:
         assert r["clear_prob"] > 0.5
         assert r["lo90"] < r["median_weeks"] <= r["hi90"]
         assert abs(r["median_weeks"] - true_wk) < 3.0
+
+    def test_latent_reservoir_reactivates_under_tac(self):
+        """The L compartment: new infections seed it; immunosuppression
+        releases it into productive infection (the mechanistic reservoir
+        behind the reactivation-onset model)."""
+        dosing = {"tacrolimus": [{"start": 60.0, "stop": None,
+                                  "trough_ng_ml": 8.0}]}
+        ode = BKPyVODESystem()
+        y0 = ode.get_infection_conditions(0.3)
+        sol = solve_ivp(lambda t, y: ode.ode_system(t, y, dosing),
+                        (0, 120), y0, t_eval=[60.0, 120.0], method='LSODA')
+        assert sol.y[22, 0] > 0  # reservoir seeded by day 60
+        ode_nolat = BKPyVODESystem(params={'latent_fraction': 0.0})
+        sol2 = solve_ivp(lambda t, y: ode_nolat.ode_system(t, y, dosing),
+                         (0, 120), ode_nolat.get_infection_conditions(0.3),
+                         t_eval=[120.0], method='LSODA')
+        assert sol.y[4, -1] > sol2.y[4, -1] * 0.9  # reservoir feeds I

@@ -11,7 +11,7 @@ produces one mechanistically.
 Model: each reactivation draw samples a reactivation day from an
 exponential hazard that scales with tacrolimus trough (deeper
 immunosuppression -> earlier reactivation). A reactivated cell injects
-a small inoculum; the canonical 22-dim ODE then carries it to the 1k
+a small inoculum; the canonical 23-dim ODE then carries it to the 1k
 cp/mL screening threshold — onset day = threshold crossing. Monte-Carlo
 over draws gives the onset distribution per drug level.
 

@@ -79,7 +79,7 @@ streamlit run src/vcm/ui/streamlit_app.py        # 11 pages
 
 ## Arc 2 additions (commit c8cc551)
 
-- **22-dim**: F_rr_u (index 21) — urinary quasi-species pool, weakened
+- **22-23-dim**: F_rr_u (index 21) — urinary quasi-species pool, weakened
   selection (uro_rr_advantage=0.15, shedding- not S-phase-coupled) +
   kidney-drainage mixing. Gosert plasma>urine rr enrichment EMERGES ~3x.
 - **`scripts/screening_policy_analysis.py`**: trigger-level policy sim —
@@ -122,7 +122,11 @@ streamlit run src/vcm/ui/streamlit_app.py        # 11 pages
   posterior median 7.0-7.2 vs truth 6.7-7.1, honest intervals.
 - generate_figures.py: 4-panel publication composite ->
   outputs/figures/composite_figure.png.
-- Suite: 216 tests / 8 skipped; benchmark PASS post-c2c.
+- Suite: 217 tests / 8 skipped; benchmark PASS post-c2c and post-L.
+- L compartment (index 22): latent_fraction 0.02 of new infections
+  aborts into latency; reactivation_flux = lat_reactivation * L *
+  (1 - tac_immune_effect) feeds I — mechanistic reservoir behind
+  reactivation_onset.py and the mid-clearance resurge channel.
 - RESEARCH QUEUE for next session: agnoprotein latency compartment
   (Lat state feeding reactivation_onset mechanistically — replaces
   the phenomenological hazard), Bayesian fit of the virtual cohort
