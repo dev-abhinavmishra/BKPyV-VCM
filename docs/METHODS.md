@@ -188,3 +188,8 @@ Mechanism notes:
   points -> joint (beta,delta) inference -> predicted clearance week.
   MAE 0.17wk, 0/24 clear/not-clear discordance — honest error bars,
   distinct train/infer parameterizations.
+
+- `scripts/optimal_control_analysis.py` — (conversion day, sir trough)
+  as continuous controls; Nelder-Mead on weeks-to-clear + rebound AUC.
+  Derived optimum: earliest feasible switch + max mTOR signal; delay
+  costs ~2.4wk/week — conversion dominance DERIVED, not grid-selected.
