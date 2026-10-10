@@ -29,8 +29,8 @@ import numpy as np
 from scipy.integrate import solve_ivp
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from vcm.simulators.ode_system import BKPyVODESystem  # noqa: E402
 from vcm.clinical.viral_load_mapper import ViralLoadMapper  # noqa: E402
+from vcm.simulators.ode_system import BKPyVODESystem  # noqa: E402
 
 HORIZON = 180.0
 SCREENING_V = 0.2034  # ~1,000 cp/mL anchor
@@ -42,19 +42,23 @@ POLICIES = [
 ]
 
 
-def run_policy(trigger_cpml, intervention="conversion", horizon=HORIZON):
+def run_policy(trigger_cpml, intervention="conversion", horizon=HORIZON,
+               monitor_days=1.0):
     """Phase 1: untreated rise, sampled weekly. When plasma crosses the
     trigger, phase 2 applies the intervention schedule from that day."""
     mapper = ViralLoadMapper()
     ode = BKPyVODESystem()
-    y0 = ode.get_infection_conditions(0.5)
+    # Inoculum below the 1k screening anchor (~500 cp/mL) so each policy
+    # triggers at a distinct day — a 0.5 inoculum already exceeds 1k and
+    # would degenerate the screening policy to day-0 treatment.
+    y0 = ode.get_infection_conditions(0.1)
     t_eval = np.linspace(0, horizon, int(horizon * 4) + 1)
 
     sol1 = solve_ivp(lambda t, y: ode.ode_system(t, y, None),
                      (0, horizon), y0, t_eval=t_eval, method="LSODA")
     cp1 = np.array([mapper.normalized_to_copies(float(v))
                     for v in np.maximum(sol1.y[0], 1e-9)])
-    weekly = np.arange(0, horizon + 1e-9, 7.0)
+    weekly = np.arange(0, horizon + 1e-9, monitor_days)
     cp_weekly = np.interp(weekly, sol1.t, cp1)
     trigger_days = weekly[cp_weekly >= trigger_cpml]
     t_trigger = float(trigger_days[0]) if len(trigger_days) else np.inf
@@ -84,10 +88,11 @@ def run_policy(trigger_cpml, intervention="conversion", horizon=HORIZON):
     cp2 = np.array([mapper.normalized_to_copies(float(v))
                     for v in np.maximum(sol2.y[0], 1e-9)])
     return _metrics(sol2, np.concatenate([cp1[:i_trig], cp2]),
-                    t_trigger, mapper)
+                    t_trigger, mapper,
+                    teff_extra=(sol1.y[16, :i_trig], sol1.t[:i_trig]))
 
 
-def _metrics(sol, cp_full, t_trigger, mapper):
+def _metrics(sol, cp_full, t_trigger, mapper, teff_extra=None):
     V, V_u, T_eff = sol.y[0], sol.y[19], sol.y[16]
     F_k = sol.y[20] if sol.y.shape[0] > 20 else np.zeros_like(V)
     F_u = sol.y[21] if sol.y.shape[0] > 21 else np.zeros_like(V)
@@ -98,13 +103,16 @@ def _metrics(sol, cp_full, t_trigger, mapper):
         if below[i:].all():
             clear_weeks = tt[i] / 7.0
             break
+    teff_auc = float(np.trapezoid(T_eff, sol.t))
+    if teff_extra is not None:  # pre-trigger phase's T_eff exposure counts too
+        teff_auc += float(np.trapezoid(teff_extra[0], teff_extra[1]))
     return {
         "trigger_day": None if np.isinf(t_trigger) else round(t_trigger, 1),
         "peak_log10_cpml": round(float(np.log10(max(cp_full.max(), 1.0))), 2),
         "clearance_weeks": None if np.isinf(clear_weeks) else round(float(clear_weeks), 1),
         "final_frr_kidney": round(float(F_k[-1]), 3),
         "final_frr_urine": round(float(F_u[-1]), 3),
-        "rebound_index": round(float(np.trapezoid(T_eff, sol.t) / HORIZON), 3),
+        "rebound_index": round(teff_auc / HORIZON, 3),
         "final_u_p_ratio": round(float(V_u[-1] / max(V[-1], 1e-12)), 1),
     }
 
@@ -114,6 +122,9 @@ def main():
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--taper", action="store_true",
                     help="intervene with tac taper alone instead of conversion")
+    ap.add_argument("--monitor-days", type=float, default=1.0,
+                    help="DNAemia check cadence (default daily; 7-30 days "
+                         "collapses trigger separation under rapid growth)")
     args = ap.parse_args()
     intervention = "taper" if args.taper else "conversion"
 
@@ -125,7 +136,8 @@ def main():
     print("-" * len(hdr))
     results = []
     for label, trig in POLICIES:
-        m = run_policy(trig, intervention=intervention)
+        m = run_policy(trig, intervention=intervention,
+                       monitor_days=args.monitor_days)
         m["policy"] = label
         results.append(m)
         trig_d = "-" if m["trigger_day"] is None else f"{m['trigger_day']:.0f}"

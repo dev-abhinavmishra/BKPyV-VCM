@@ -24,7 +24,7 @@ Audit date: 2026-10-05. Branch: `devin/finish-vcm`.
 
 ## What runs
 
-- `pytest tests/` — **208 tests pass** (was 184 passing before this session;
+- `pytest tests/` — **211 tests pass** (was 184 passing before this session;
   +14 new: benchmark metrics, sha256 helper, holdout split, e2e smoke).
 - `validate_bkpyv.py` — exits 0 (after fix, see below).
 - `validate_isef.py` — 4/4 pattern checks PASS, "EXCELLENT" (after fix).
@@ -75,7 +75,8 @@ Audit date: 2026-10-05. Branch: `devin/finish-vcm`.
 | 17 | C_u | healthy urothelial cells | Funk 2008 urinary reservoir |
 | 18 | I_u | infected urothelial cells | >95% of urinary load |
 | 19 | V_u | urinary virion pool | urine:plasma ~3000:1 |
-| 20 | F_rr | rearranged-NCCR fraction | Gosert 2008 emergence dynamics |
+| 20 | F_rr | rr-NCCR fraction, KIDNEY pool | Gosert 2008 emergence dynamics |
+| 21 | F_rr_u | rr-NCCR fraction, URINARY pool | weakened selection (uro_rr_advantage 0.15) + drain mixing |
 
 ## Parameters with sources
 

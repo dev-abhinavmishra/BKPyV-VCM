@@ -171,4 +171,9 @@ Mechanism notes:
   conversion intervention fired at 1k / 10k / 100k cp/mL / never.
   Emergent ordering: earlier trigger -> earlier clearance AND suppressed
   rr emergence (F_k 0.02 vs 0.93) — the mechanistic argument for
-  Kotton's intensive-screening policy.
+  Kotton's intensive-screening policy. `--monitor-days` sweeps the check
+  cadence: under rapid doubling, WEEKLY monitoring collapses the 1k/10k
+  distinction (both fire the same week) and MONTHLY monitoring can miss
+  the 10k window entirely (only the 1k trigger ever fires — clearance
+  slips to ~wk8.5 with F_k already 0.18). Cadence is itself an
+  intervention variable.

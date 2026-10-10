@@ -13,7 +13,7 @@ The ODE system is based on standard virus-host modeling approaches extended with
 - A urinary/urothelial compartment with kidney↔bladder cross-feeding
 - Research-validated parameters from clinical studies
 
-State Variables (21-dimensional vector):
+State Variables (22-dimensional vector):
 1. V: Viral load (normalised scale; see clinical.viral_load_mapper for the bridge to copies/mL)
 2. T: Large T-antigen level (arbitrary units)
 3. G_v: Viral gene expression level (arbitrary units)

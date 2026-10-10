@@ -3,14 +3,14 @@
 import sys
 from pathlib import Path
 
-import pytest
 import numpy as np
+import pytest
 from scipy.integrate import solve_ivp
 
-from vcm.simulators.ode_system import BKPyVODESystem
-from vcm.simulators.bkpyv_ode_simulator import BKPyVODESimulator
-from vcm.plugins.transplant.bk_polyomavirus import BKPolyomavirusPlugin
 from vcm.core.models import Perturbation, PerturbationType
+from vcm.plugins.transplant.bk_polyomavirus import BKPolyomavirusPlugin
+from vcm.simulators.bkpyv_ode_simulator import BKPyVODESimulator
+from vcm.simulators.ode_system import BKPyVODESystem
 
 
 class TestBKPyVODESystem:
@@ -416,8 +416,6 @@ class TestBKPyVODESimulator:
 
     def test_infection_event_creation(self):
         """Test infection event creation from perturbations."""
-        simulator = BKPyVODESimulator()
-
         infection = Perturbation(
             id="bkpyv_infection",
             name="BKPyV infection",

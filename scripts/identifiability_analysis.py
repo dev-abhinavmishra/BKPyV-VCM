@@ -60,7 +60,8 @@ PROBE_PARAMS = [
     # drug PD
     "tac_immune_effect", "mtor_inhibition", "tac_enhancement",
 ]
-OBSERVABLES = {"plasma_V": 0, "urine_V": 19, "t_antigen": 1, "F_rr": 20}
+OBSERVABLES = {"plasma_V": 0, "urine_V": 19, "t_antigen": 1,
+            "F_rr": 20, "F_rr_urine": 21}
 COLLINEARITY_THRESHOLD = 0.98  # |corr| of sensitivity profiles
 
 
@@ -134,12 +135,14 @@ def main():
                     key=lambda kv: -kv[1].get("plasma_V", 0.0))
     print("Identifiability screen — RMS sensitivity of each observable to a")
     print("+-5% log parameter perturbation (baseline: untreated infection, 90 d)\n")
-    hdr = f"{'parameter':<24} {'plasma_V':>9} {'urine_V':>9} {'T_ag':>9} {'F_rr':>9}"
+    hdr = (f"{'parameter':<24} {'plasma_V':>9} {'urine_V':>9} {'T_ag':>9} "
+               f"{'F_rr':>9} {'F_rr_u':>9}")
     print(hdr)
     print("-" * len(hdr))
     for name, row in ranked:
         print(f"{name:<24} {row.get('plasma_V', 0):>9.3f} {row.get('urine_V', 0):>9.3f} "
-              f"{row.get('t_antigen', 0):>9.3f} {row.get('F_rr', 0):>9.3f}")
+              f"{row.get('t_antigen', 0):>9.3f} {row.get('F_rr', 0):>9.3f} "
+              f"{row.get('F_rr_urine', 0):>9.3f}")
 
     print("\nConfounded parameter pairs on plasma V alone (|corr| > "
           f"{COLLINEARITY_THRESHOLD}):")
