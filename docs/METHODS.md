@@ -187,7 +187,20 @@ Mechanism notes:
   (beta/delta/p/inoculum jittered), first three noisy weekly qPCR
   points -> joint (beta,delta) inference -> predicted clearance week.
   MAE 0.17wk, 0/24 clear/not-clear discordance — honest error bars,
-  distinct train/infer parameterizations.
+  distinct train/infer parameterizations. `forecast_posterior` adds
+  full uncertainty quantification: Metropolis posterior over
+  (beta, delta) propagated through conversion -> clearance-week
+  distribution (median, 90% interval, P(clear)) — "clear by week X
+  with 90% probability".
+- `scripts/generate_figures.py` — four-panel publication composite
+  (compartments vs thresholds, two-pool rr emergence, taper-vs-
+  conversion, onset distributions by trough) -> outputs/figures/.
+- Cell-to-cell transmission channel (`c2c_rate`, default 0.03):
+  free-virion spread is V-dependent (delta/AK-cleared); direct
+  cell-to-cell spread via virological synapses is V-independent —
+  structurally shielded from extracellular clearance. Raises the
+  infected reservoir under deep suppression: the persistence
+  channel that explains why viremia resurges after interruption.
 
 - `scripts/optimal_control_analysis.py` — (conversion day, sir trough)
   as continuous controls; Nelder-Mead on weeks-to-clear + rebound AUC.

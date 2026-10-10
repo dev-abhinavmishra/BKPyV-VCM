@@ -881,3 +881,20 @@ class TestNovelExtensions:
         i_c2c = solve_ivp(lambda t, y: ode_c2c.ode_system(t, y, None),
                           (0, 120), y0, t_eval=[120.0], method='LSODA').y[4, -1]
         assert i_c2c > i_free
+
+    def test_forecast_posterior_interval(self):
+        """Metropolis UQ: posterior median lands near truth and the 90%
+        interval has finite positive width."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent
+                               / "scripts"))
+        import early_forecast as ef
+        ode = BKPyVODESystem(params={"beta": 0.3, "delta": 0.4})
+        y0 = ode.get_infection_conditions(0.1)
+        tt, cp_true, _ = ef._simulate(ode, y0, ef._conversion(ef.ACT_DAY))
+        obs = cp_true[np.searchsorted(tt, np.array(ef.OBS_DAYS))]
+        true_wk = ef._clearance_week(tt, cp_true)
+        r = ef.forecast_posterior(ef.OBS_DAYS, obs,
+                                  n_mcmc=300, n_forward=15, seed=5)
+        assert r["clear_prob"] > 0.5
+        assert r["lo90"] < r["median_weeks"] <= r["hi90"]
+        assert abs(r["median_weeks"] - true_wk) < 3.0

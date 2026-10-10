@@ -111,7 +111,20 @@ streamlit run src/vcm/ui/streamlit_app.py        # 11 pages
 
 - pharmacogenomic_stratification.py: expressor trough 4.8 vs 8.0 ->
   onset 10.0wk vs 6.4wk; risk orthogonality is the headline.
-- RESEARCH QUEUE for next session: cell-to-cell spread channel (dI +=
-  c2c*I*C, antibody-insensitive persistence), agnoprotein latency
-  compartment, virtual-patient MCMC data assimilation, figure
-  generation for poster.
+
+## Loop arc 3 (continued, UNMERGED)
+
+- c2c transmission channel shipped (c2c_rate 0.03, V-independent
+  spread): benchmark still OVERALL PASS; reservoir-persistence
+  direction pinned by test. Effect is modest by design (10% of beta).
+- forecast_posterior (early_forecast.py): Metropolis UQ over
+  (beta,delta) -> clearance-week median/90%CI/P(clear). Verified:
+  posterior median 7.0-7.2 vs truth 6.7-7.1, honest intervals.
+- generate_figures.py: 4-panel publication composite ->
+  outputs/figures/composite_figure.png.
+- Suite: 216 tests / 8 skipped; benchmark PASS post-c2c.
+- RESEARCH QUEUE for next session: agnoprotein latency compartment
+  (Lat state feeding reactivation_onset mechanistically — replaces
+  the phenomenological hazard), Bayesian fit of the virtual cohort
+  to Thompson's series when it arrives, Streamlit poster-mode page
+  rendering the composite + UQ demo.
