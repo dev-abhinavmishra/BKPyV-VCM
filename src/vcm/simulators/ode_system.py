@@ -156,6 +156,23 @@ class BKPyVODESystem:
             'sir_absorption': 0.4,    # Sirolimus onset rate while treatment active (1/day)
             'sir_clearance': 0.25,    # Sirolimus washout rate after treatment stops (1/day)
 
+            # Pharmacokinetics in real units (used when a dosing schedule
+            # specifies ``trough_ng_ml`` instead of dimensionless ``target``).
+            # One-compartment approximation at maintenance dosing: the state
+            # relaxes toward the target trough with the drug's elimination
+            # half-life; peak-trough oscillation is averaged out.
+            'tac_pk_half_life_days': 0.5,   # Tacrolimus t½ ~12 h
+            'sir_pk_half_life_days': 2.5,   # Sirolimus t½ ~60 h (slow washout —
+                                            # why tac→sir switches take weeks)
+            'tac_ref_trough_ngml': 8.0,     # Trough producing unit dosing
+                                            # intensity (typical early-maintenance
+                                            # trough 5-10 ng/mL)
+            'sir_ref_trough_ngml': 4.0,     # Trough producing unit dosing
+                                            # intensity; anchored to the in-vitro
+                                            # antiviral IC90 ~4 ng/mL (Hirsch 2016),
+                                            # so real-world 5-10 ng/mL troughs
+                                            # saturate the mTOR effect
+
             # Research-grounded drug effects (Hirsch 2016, in vitro)
             'tac_enhancement': 1.5,    # Compatibility parameter; immune-control effect is used below
             'mtor_inhibition': 0.5,   # Residual permissiveness under full sirolimus (~IC90 4 ng/mL)
@@ -262,14 +279,22 @@ class BKPyVODESystem:
             y: State vector [V, T, G_v, C, I, D, CC, DNA, E, IFN, AK, D_tac,
                D_sir, P_rep, P_immune, T_naive, T_eff, C_u, I_u, V_u]
             dosing_context: Optional dict describing drug administration:
-                {'tacrolimus': {'start': float, 'stop': float|None, 'target': float},
+                {'tacrolimus': {'start': float, 'stop': float|None,
+                                'target': float | 'trough_ng_ml': float} | [ ... ],
                  'sirolimus': {...}}
+                Each drug maps to one schedule dict or a LIST of schedule
+                dicts (stepwise regimens: e.g. a tacrolimus taper is
+                [{start 0, stop 42, trough_ng_ml 8}, {start 42, trough 4}]).
+                When windows overlap, the strongest intensity wins.
                 ``target`` is the dimensionless dosing intensity (≈1.0 = full
-                immunosuppression). While active, D approaches ``target`` with
-                the drug's absorption rate; afterwards it decays with the
-                drug's clearance rate. (Legacy ``{time: {drug: magnitude}}``
-                bolus dicts are also accepted and applied exactly once when
-                ``t`` crosses the key time.)
+                immunosuppression) driven with the ad-hoc absorption/clearance
+                envelope. ``trough_ng_ml`` is a real steady-state trough
+                concentration in ng/mL — converted to intensity through the
+                drug's reference trough and driven with first-order kinetics
+                at the drug's elimination half-life (tac ~12 h, sir ~60 h).
+                If both are present, ``trough_ng_ml`` wins. (Legacy
+                ``{time: {drug: magnitude}}`` bolus dicts are also accepted
+                and applied exactly once when ``t`` crosses the key time.)
 
         Returns:
             Derivatives dy/dt (all per day)
@@ -311,16 +336,49 @@ class BKPyVODESystem:
         tac_active = sir_active = False
         tac_target = sir_target = 0.0
         tac_bolus = sir_bolus = 0.0
+        tac_pk_mode = sir_pk_mode = False
         if dosing_context:
-            for drug, sched in dosing_context.items():
-                if isinstance(sched, dict) and "target" in sched:
+            for drug, scheds in dosing_context.items():
+                # Each drug maps to a schedule LIST (a single dict is treated
+                # as a one-window list) so stepwise regimens — e.g. a
+                # tacrolimus taper 8 -> 4 ng/mL — are expressible. When
+                # several windows are active the strongest intensity wins.
+                if isinstance(scheds, dict):
+                    scheds = [scheds]
+                if not isinstance(scheds, list):
+                    continue
+                for sched in scheds:
+                    if not isinstance(sched, dict):
+                        continue
                     start = float(sched.get("start", 0.0))
                     stop = sched.get("stop", None)
                     active = start <= t and (stop is None or t < float(stop))
+                    # ng/mL schedules: ``trough_ng_ml`` is the steady-state
+                    # target trough; converted to dosing intensity via the
+                    # drug's reference trough and driven with first-order PK
+                    # kinetics. A dimensionless ``target`` keeps the legacy
+                    # intensity path.
+                    trough = sched.get("trough_ng_ml", None)
                     if drug == "tacrolimus":
-                        tac_active, tac_target = active, float(sched["target"])
+                        if trough is not None:
+                            tac_pk_mode = True
+                            if active:
+                                tac_active = True
+                                tac_target = max(tac_target,
+                                                 float(trough) / p['tac_ref_trough_ngml'])
+                        elif "target" in sched and active:
+                            tac_active = True
+                            tac_target = max(tac_target, float(sched["target"]))
                     elif drug == "sirolimus":
-                        sir_active, sir_target = active, float(sched["target"])
+                        if trough is not None:
+                            sir_pk_mode = True
+                            if active:
+                                sir_active = True
+                                sir_target = max(sir_target,
+                                                 float(trough) / p['sir_ref_trough_ngml'])
+                        elif "target" in sched and active:
+                            sir_active = True
+                            sir_target = max(sir_target, float(sched["target"]))
             # Legacy bolus form {time: {drug: magnitude}} (kept for backward
             # compatibility with old callers/tests)
             if all(isinstance(k, (int, float)) for k in dosing_context):
@@ -425,15 +483,25 @@ class BKPyVODESystem:
         dAKdt = p['ak_prod'] * IFN - p['ak_decay'] * AK
 
         # --- Drug pharmacokinetics ------------------------------------------
+        # ng/mL schedules use the drug's real elimination half-life for both
+        # approach-to-steady-state and washout (one-compartment approximation;
+        # dosing-frequency oscillation averaged out). Dimensionless schedules
+        # keep the legacy absorption/clearance envelope.
+        tac_pk_rate = np.log(2.0) / p['tac_pk_half_life_days']
+        sir_pk_rate = np.log(2.0) / p['sir_pk_half_life_days']
         if tac_active:
-            dD_tacdt = p['tac_absorption'] * (tac_target - D_tac)
+            rate = tac_pk_rate if tac_pk_mode else p['tac_absorption']
+            dD_tacdt = rate * (tac_target - D_tac)
         else:
             # Decay applies to any present amount (incl. legacy bolus doses).
-            dD_tacdt = -p['tac_clearance'] * D_tac_eff
+            rate = tac_pk_rate if tac_pk_mode else p['tac_clearance']
+            dD_tacdt = -rate * D_tac_eff
         if sir_active:
-            dD_sirdt = p['sir_absorption'] * (sir_target - D_sir)
+            rate = sir_pk_rate if sir_pk_mode else p['sir_absorption']
+            dD_sirdt = rate * (sir_target - D_sir)
         else:
-            dD_sirdt = -p['sir_clearance'] * D_sir_eff
+            rate = sir_pk_rate if sir_pk_mode else p['sir_clearance']
+            dD_sirdt = -rate * D_sir_eff
 
         # --- Pathway dynamics -----------------------------------------------
         # dP_rep/dt: saturating production from DNA synthesis, scaled by mTOR tone

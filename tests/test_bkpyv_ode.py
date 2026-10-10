@@ -597,3 +597,86 @@ class TestExtendedCompartments:
         for key in ("urine_viral_load", "bkpyv_tcell_effector",
                     "bkpyv_tcell_naive", "urothelial_infected_cells"):
             assert key in md
+
+
+class TestPharmacokineticDosing:
+    """ng/mL (trough) dosing schedules with real drug half-lives."""
+
+    def test_ngml_taper_resolves_to_troughs(self):
+        """A tacrolimus 8 -> 4 ng/mL step taper must drive D_tac to
+        intensity 1.0 then 0.5 (ref trough 8 ng/mL)."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        ctx = {"tacrolimus": [
+            {"start": 0.0, "stop": 42.0, "trough_ng_ml": 8.0},
+            {"start": 42.0, "stop": None, "trough_ng_ml": 4.0},
+        ]}
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y, ctx),
+            (0, 90), y0, t_eval=np.arange(0, 91, 1.0), method='LSODA',
+        )
+        d_tac = sol.y[11]
+        assert 0.9 <= d_tac[40] <= 1.1      # 8 ng/mL steady state
+        assert 0.4 <= d_tac[60] <= 0.6      # 4 ng/mL steady state
+
+    def test_ngml_washout_follows_half_life(self):
+        """Stopping tacrolimus must wash out on the ~12 h half-life, not the
+        legacy ad-hoc clearance envelope."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        ctx = {"tacrolimus": [{"start": 0.0, "stop": 30.0, "trough_ng_ml": 8.0}]}
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y, ctx),
+            (0, 60), y0, t_eval=np.linspace(0, 60, 121), method='LSODA',
+        )
+        d_tac = sol.y[11]
+        # 12 h half-life: 2 days after stop -> ~4 half-lives -> ~1/16 of target
+        stopped_idx = int(np.searchsorted(sol.t, 32.0))
+        assert d_tac[stopped_idx] < 0.15
+
+    def test_sirolimus_slow_accumulation(self):
+        """Sirolimus (t½ ~60 h) must accumulate slowly — a tac->sir switch is
+        not instantaneous, matching clinical practice."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        ctx = {"sirolimus": [{"start": 0.0, "stop": None, "trough_ng_ml": 6.0}]}
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y, ctx),
+            (0, 30), y0, t_eval=np.arange(0, 31, 1.0), method='LSODA',
+        )
+        d_sir = sol.y[12]
+        target = 6.0 / ode_system.params['sir_ref_trough_ngml']
+        assert d_sir[2] < target * 0.6      # far from steady state at day 2
+        assert d_sir[14] > target * 0.7     # mostly there by ~2 weeks
+
+    def test_legacy_dimensionless_target_unchanged(self):
+        """Dimensionless ``target`` schedules keep the legacy envelope."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        ctx = {"tacrolimus": {"start": 0.0, "stop": None, "target": 1.0}}
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y, ctx),
+            (0, 30), y0, t_eval=np.arange(0, 31, 1.0), method='LSODA',
+        )
+        assert sol.y[11, -1] > 0.9
+
+    def test_ngml_units_from_perturbation(self):
+        """Perturbations declaring parameters units=ng_ml must reach the ODE
+        as trough_ng_ml windows."""
+        pert = Perturbation(
+            id="tac_taper", name="tac taper",
+            perturbation_type=PerturbationType.DRUG_TREATMENT,
+            target_id="FKBP1A", magnitude=8.0, timing=0.0, duration=42.0,
+            parameters={"units": "ng_ml"},
+        )
+        pert2 = Perturbation(
+            id="tac_low", name="tac low",
+            perturbation_type=PerturbationType.DRUG_TREATMENT,
+            target_id="FKBP1A", magnitude=4.0, timing=42.0,
+            parameters={"units": "ng_ml"},
+        )
+        ctx = BKPyVODESimulator._build_dosing_context([pert, pert2])
+        assert len(ctx["tacrolimus"]) == 2
+        assert ctx["tacrolimus"][0]["trough_ng_ml"] == 8.0
+        assert ctx["tacrolimus"][1]["trough_ng_ml"] == 4.0
+        assert ctx["tacrolimus"][0]["stop"] == 42.0

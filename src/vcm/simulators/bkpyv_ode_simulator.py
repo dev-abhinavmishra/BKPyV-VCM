@@ -318,9 +318,16 @@ class BKPyVODESimulator(BaseSimulator):
     def _build_dosing_context(perturbations: list[Perturbation]) -> Dict[str, Any]:
         """Build the continuous-dosing schedule used by the ODE right-hand side.
 
-        Each drug entry is ``{'start': day, 'stop': day|None, 'target': magnitude}``.
-        Multiple treatments of the same drug merge to the earliest start,
-        latest stop, and strongest target. ``stop=None`` means ongoing dosing.
+        Each drug maps to a LIST of schedule windows ``{'start': day,
+        'stop': day|None, 'target': magnitude}`` for dimensionless dosing, or
+        ``{'start', 'stop', 'trough_ng_ml': magnitude}`` when the
+        perturbation declares ``parameters={"units": "ng_ml"}`` — a real
+        steady-state trough concentration driven with the drug's
+        elimination half-life (see ``BKPyVODESystem.ode_system``).
+        Windows are kept as a schedule rather than merged so that stepwise
+        regimens (e.g. a tacrolimus taper 8 -> 4 ng/mL) are expressible;
+        when windows overlap, the strongest intensity wins in the ODE.
+        ``stop=None`` means ongoing dosing.
         """
         context: Dict[str, Any] = {}
         for pert in perturbations:
@@ -332,20 +339,11 @@ class BKPyVODESimulator(BaseSimulator):
             start = float(pert.timing) if pert.timing is not None else 0.0
             stop = None if pert.duration is None else start + float(pert.duration)
             magnitude = float(pert.magnitude)
-            if drug not in context:
-                context[drug] = {"start": start, "stop": stop, "target": magnitude, "continuous": pert.duration is None}
-            else:
-                entry = context[drug]
-                entry["start"] = min(entry["start"], start)
-                if entry["continuous"] or pert.duration is None:
-                    entry["stop"] = None
-                    entry["continuous"] = True
-                elif entry["stop"] is not None and stop is not None:
-                    entry["stop"] = max(entry["stop"], stop)
-                entry["target"] = max(entry["target"], magnitude)
-        for entry in context.values():
-            if entry.pop("continuous", False):
-                entry["stop"] = None
+            ng_units = str((pert.parameters or {}).get("units", "")).lower() in (
+                "ng_ml", "ng/ml", "ngml", "ng/ml trough")
+            dose_key = "trough_ng_ml" if ng_units else "target"
+            context.setdefault(drug, []).append(
+                {"start": start, "stop": stop, dose_key: magnitude})
         return context
 
     def _solve_ode_system(self, y0: np.ndarray, t_span: tuple,
@@ -527,6 +525,13 @@ class BKPyVODESimulator(BaseSimulator):
         new_state.metadata["tacrolimus_effect"] = D_tac
         new_state.metadata["sirolimus_effect"] = D_sir
         new_state.metadata["nccr_variant"] = template_state.metadata.get("nccr_variant", "archetype")
+
+        # Estimated trough concentrations — the inverse of the ng/mL
+        # intensity map (assumption-labelled: D is a unit-intensity exposure
+        # at the reference trough, so D * ref_trough is an effective-concentration
+        # readout, not a measured level)
+        new_state.metadata["tacrolimus_est_ngml"] = D_tac * self.ode_system.params.get("tac_ref_trough_ngml", 8.0)
+        new_state.metadata["sirolimus_est_ngml"] = D_sir * self.ode_system.params.get("sir_ref_trough_ngml", 4.0)
 
         # Adaptive T-cell arm and urinary compartment (Funk 2008)
         new_state.metadata["bkpyv_tcell_naive"] = T_naive
