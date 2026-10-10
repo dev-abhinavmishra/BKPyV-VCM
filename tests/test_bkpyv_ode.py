@@ -856,3 +856,15 @@ class TestNovelExtensions:
         assert sum(1 for r in rows
                    if (r["pred_clearance_weeks"] is None)
                    != (r["true_clearance_weeks"] is None)) == 0
+
+    def test_genotype_stratification_direction(self):
+        """CYP3A5 expressors clear tac faster -> lower effective trough
+        -> LESS immunosuppression -> later (not earlier) viral onset.
+        Viral risk and rejection risk are orthogonalized by genotype."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        from pharmacogenomic_stratification import genotype_outcome
+
+        non = genotype_outcome("CYP3A5 non-expressor (*3/*3)", n=40)
+        exp = genotype_outcome("CYP3A5 expressor (*1 carrier)", n=40)
+        assert exp["effective_trough"] < non["effective_trough"]
+        assert exp["median_onset_weeks"] > non["median_onset_weeks"]

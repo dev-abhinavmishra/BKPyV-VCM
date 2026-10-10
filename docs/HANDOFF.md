@@ -106,3 +106,12 @@ streamlit run src/vcm/ui/streamlit_app.py        # 11 pages
 - early_forecast.py: 3 noisy weekly points -> (beta,delta) grid -> MAE
   0.17wk, 0 discordance. The bedside-facing claim.
 - Next candidates: optimal-control derivation, cell-to-cell spread.
+
+## Loop arc 2 (continued, UNMERGED)
+
+- pharmacogenomic_stratification.py: expressor trough 4.8 vs 8.0 ->
+  onset 10.0wk vs 6.4wk; risk orthogonality is the headline.
+- RESEARCH QUEUE for next session: cell-to-cell spread channel (dI +=
+  c2c*I*C, antibody-insensitive persistence), agnoprotein latency
+  compartment, virtual-patient MCMC data assimilation, figure
+  generation for poster.

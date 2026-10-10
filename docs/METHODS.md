@@ -193,3 +193,9 @@ Mechanism notes:
   as continuous controls; Nelder-Mead on weeks-to-clear + rebound AUC.
   Derived optimum: earliest feasible switch + max mTOR signal; delay
   costs ~2.4wk/week — conversion dominance DERIVED, not grid-selected.
+
+- `scripts/pharmacogenomic_stratification.py` — CYP3A5 genotype ->
+  effective trough (expressors clear tac ~2x faster, CPIC) -> onset
+  distribution + clearance. Emergent inversion: non-expressors carry
+  the early viral-onset risk; expressors carry rejection risk — viral
+  and rejection risk are orthogonalized by genotype.
