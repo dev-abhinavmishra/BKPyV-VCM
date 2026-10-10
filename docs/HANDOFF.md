@@ -91,3 +91,10 @@ streamlit run src/vcm/ui/streamlit_app.py        # 11 pages
 - Traps now encoded in tests/skill: normalized_to_copies is SCALAR-only;
   est_ngml only under trough_ng_ml; urine metrics = model-internal ratio.
 - 211 tests; benchmark 6 signature checks PASS.
+
+## Final gate (commit ad96674)
+
+- rr capsid fitness cost now dynamic: virion_cost coupling 0.4 applied to
+  viral_production. Do NOT raise to 1.0 — breaks curtail_50 fidelity.
+- taper-mode paradox worth presenting: taper at ANY trigger -> MORE
+  emergence than no action (prolongs selection pressure).
