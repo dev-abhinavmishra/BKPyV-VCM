@@ -2,7 +2,7 @@
 
 ## 1. Model — bkpyv_ode (canonical engine)
 
-21-dimensional ODE, per-day rates, `src/vcm/simulators/ode_system.py`,
+22-dimensional ODE, per-day rates, `src/vcm/simulators/ode_system.py`,
 integrated with `scipy.integrate.solve_ivp` (LSODA).
 
 State: V (free virions), T (intracellular T-antigen), G_v (replication-
@@ -109,7 +109,7 @@ outputs byte-identically up to numeric noise in UMAP.
 
 ## 6. Multi-compartment extension (Phase 3, October 2026)
 
-The canonical engine was extended from 15 to **21 state variables**
+The canonical engine was extended from 15 to **22 state variables**
 (indices appended — never renumbered — so all legacy consumers keep
 working):
 
@@ -120,7 +120,8 @@ working):
 | 17 | C_u | healthy urothelial cells | Funk 2008 urinary reservoir |
 | 18 | I_u | infected urothelial cells | >95% of urinary viral load is urothelial origin |
 | 19 | V_u | urinary virion pool | urine:plasma ~3000:1 (Funk 2008) |
-| 20 | F_rr | rearranged-NCCR fraction of virion pool | Gosert 2008; in-host quasi-species dynamics |
+| 20 | F_rr | rr-NCCR fraction, KIDNEY pool | Gosert 2008 |
+| 21 | F_rr_u | rr-NCCR fraction, URINARY pool | shedding-driven selection (weakened: uro_rr_advantage 0.15) + kidney-drainage mixing |
 
 Mechanism notes:
 
@@ -136,8 +137,8 @@ Mechanism notes:
 - **NCCR quasi-species**: `dF_rr/dt = μ·pressure·(1-F) + s·pressure·F(1-F)
   - r·F` where pressure = replication activity. Rearranged variants emerge
   under sustained viremia and dominate on the Gosert weeks-months
-  timescale; the discrete archetype/rearranged presets are the F=0/F=1
-  boundary conditions. Effective early-gene and capsid multipliers
+  timescale; the discrete archetype/rearranged presets seed the F=0/F=1
+  boundary conditions of BOTH pools. Effective early-gene and capsid multipliers
   interpolate (early ×1→×2, capsid ×1→×0.5).
 - **Pharmacokinetics**: dosing schedules accept `trough_ng_ml` windows
   resolved with real elimination half-lives (tac ~12 h, sir ~60 h) and
@@ -165,3 +166,9 @@ Mechanism notes:
 - Benchmark gained compartment-signature checks: urine:plasma ≥50×,
   F_rr ≥0.5 by wk 17, tac-suppressed T_eff peak ≤0.5× untreated — all
   PASS in `outputs/benchmark/viral_load_benchmark.json`.
+
+- `scripts/screening_policy_analysis.py` — trigger-level policies: same
+  conversion intervention fired at 1k / 10k / 100k cp/mL / never.
+  Emergent ordering: earlier trigger -> earlier clearance AND suppressed
+  rr emergence (F_k 0.02 vs 0.93) — the mechanistic argument for
+  Kotton's intensive-screening policy.

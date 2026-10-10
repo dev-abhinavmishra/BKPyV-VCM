@@ -64,14 +64,16 @@ Ordered roughly by severity. Each item states the boundary plainly.
     (BLAS/threading); cluster identities and counts are deterministic but
     embedding coordinates may differ in the last decimal.
 
-## Multi-compartment extension (21-dim) caveats
+## Multi-compartment extension (22-dim) caveats
 
 - **Urothelial block is population-level** — no per-cell TAg/S-phase gates
   (the tissue-level Funk 2008 formulation); intracellular mechanism lives
   only in the kidney block.
-- **F_rr is a single pool-wide fraction**, not per-compartment
-  quasi-species — the model cannot express Gosert's plasma-vs-urine rr
-  enrichment difference; it predicts *average* emergence.
+- **F_rr is resolved per pool** (kidney F_rr vs urinary F_rr_u) — the
+  plasma>urine rr enrichment is emergent (~3x vs Gosert's ~5x ratio,
+  magnitude reported not forced). Unverified prediction: under conversion
+  the urinary pool becomes rr-dominated while the kidney pool stays
+  archetype — clinically unmeasured, flagged as hypothesis.
 - **PK layer is a maintenance-trough approximation** (first-order
   approach to target trough at elimination t½); peak-trough oscillation
   is averaged out — appropriate for week-scale regimen questions, not

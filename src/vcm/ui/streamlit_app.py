@@ -981,12 +981,13 @@ def st_regimen_design_page():
                 # cannot produce urine concentrations).
                 "log10 urine V_u": _np.log10(_np.maximum(sol.y[19], 1e-9)),
                 "T_eff": sol.y[16],
-                "F_rr": sol.y[20],
+                "F_rr kidney": sol.y[20],
+                "F_rr urine": sol.y[21] if sol.y.shape[0] > 21 else 0.0,
             }).set_index("week")
             st.subheader("Plasma cp/mL vs urinary V_u (log scale)")
             st.line_chart(traj[["log10 plasma cp/mL", "log10 urine V_u"]])
             st.subheader("Immune rebound and NCCR evolution")
-            st.line_chart(traj[["T_eff", "F_rr"]])
+            st.line_chart(traj[["T_eff", "F_rr kidney", "F_rr urine"]])
         else:
             with st.spinner("Running full schedule sweep..."):
                 from optimize_reduction_schedule import candidate_schedules

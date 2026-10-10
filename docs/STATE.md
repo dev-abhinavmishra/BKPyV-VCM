@@ -6,7 +6,7 @@ Audit date: 2026-10-05. Branch: `devin/finish-vcm`.
 
 | Area | Path | Status |
 |---|---|---|
-| Canonical engine | `src/vcm/simulators/ode_system.py` | Working — **21-dim ODE**, per-day rates (+T-cell arm, urinary compartment, NCCR quasi-species) |
+| Canonical engine | `src/vcm/simulators/ode_system.py` | Working — **22-dim ODE**, per-day rates (+T-cell arm, urinary compartment, NCCR quasi-species) |
 | ODE wrapper | `src/vcm/simulators/bkpyv_ode_simulator.py` | Working |
 | Legacy simulator | `src/vcm/simulators/bkpyv_simulator.py` | Working, **superseded for analysis** (see below) |
 | Plugin/parameters | `src/vcm/plugins/transplant/bk_polyomavirus/` | Working |
@@ -51,7 +51,7 @@ Audit date: 2026-10-05. Branch: `devin/finish-vcm`.
    committed, hash check case-sensitive). New one-command script with
    `.part` resume + sha256 verification; all 26 GSM samples restored.
 
-## ODE state variables (bkpyv_ode, 21 dims, per-day)
+## ODE state variables (bkpyv_ode, 22 dims, per-day)
 
 | # | State | Meaning | Source/basis |
 |---|-------|---------|--------------|

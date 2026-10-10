@@ -38,9 +38,14 @@ State Variables (21-dimensional vector):
 18. C_u: Healthy urothelial cells (urinary/bladder compartment, fraction)
 19. I_u: Infected urothelial cells (fraction)
 20. V_u: Urinary viral load (virions in the bladder/urine compartment)
-21. F_rr: Rearranged-NCCR fraction of the virion pool (0-1; in-host
+21. F_rr: Rearranged-NCCR fraction of the KIDNEY virion pool (0-1; in-host
           quasi-species dynamics — Gosert 2008: rr-NCCR emerges under
           sustained high viremia and marks high-load plasma)
+22. F_rr_u: Rearranged-NCCR fraction of the URINARY pool. Distinct from
+          the kidney pool: urothelial production is shedding-driven rather
+          than S-phase-coupled, so the rr early-gene advantage is weakened
+          (rr enrichment is a plasma signature, not a urine one — Gosert
+          2008: ~22% plasma vs ~4% urine).
 
 Time unit: all rate constants are PER DAY. Clinical interpretation should compare against
 weeks-scale plasma DNAemia (Funk 2006, PMID 16323135) rather than in-vitro hours.
@@ -136,6 +141,11 @@ class BKPyVODESystem:
             'nccr_selection_rate': 0.8,    # Competitive advantage of rr under replication (1/day)
             'nccr_reversion_rate': 0.0005, # Slow drift back toward archetype (1/day)
             'nccr_emergence_enabled': 1.0, # 0 restores the fixed-genotype model
+            # Urothelial rr selection is weakened: production there is
+            # cell-shedding/turnover-driven, not S-phase-coupled, so the
+            # early-gene overexpression advantage buys little — this is
+            # what makes rr enrichment plasma-specific (Gosert 2008).
+            'uro_rr_advantage': 0.15,      # Urothelial selection relative to kidney
 
             # Viral gene expression
             'g_prod': 0.15,        # Viral gene production rate (1/day)
@@ -285,7 +295,8 @@ class BKPyVODESystem:
             'C_u',     # Healthy urothelial cells
             'I_u',     # Infected urothelial cells
             'V_u',     # Urinary viral load
-            'F_rr',    # Rearranged-NCCR fraction of the virion pool
+            'F_rr',    # Rearranged-NCCR fraction of the kidney virion pool
+            'F_rr_u',  # Rearranged-NCCR fraction of the urinary pool
         ]
     
     def ode_system(self, t: float, y: np.ndarray,
@@ -295,7 +306,8 @@ class BKPyVODESystem:
         Args:
             t: Current time (days)
             y: State vector [V, T, G_v, C, I, D, CC, DNA, E, IFN, AK, D_tac,
-               D_sir, P_rep, P_immune, T_naive, T_eff, C_u, I_u, V_u, F_rr]
+               D_sir, P_rep, P_immune, T_naive, T_eff, C_u, I_u, V_u,
+               F_rr, F_rr_u]
             dosing_context: Optional dict describing drug administration:
                 {'tacrolimus': {'start': float, 'stop': float|None,
                                 'target': float | 'trough_ng_ml': float} | [ ... ],
@@ -322,6 +334,7 @@ class BKPyVODESystem:
         V, T, G_v, C, I, D, CC, DNA, E, IFN, AK, D_tac, D_sir, P_rep, P_immune = y[:15]
         T_naive, T_eff, C_u, I_u, V_u = y[15:20]
         F_rr = float(y[20]) if len(y) > 20 else 0.0
+        F_rr_u = float(y[21]) if len(y) > 21 else 0.0
 
         p = self.params
 
@@ -348,6 +361,7 @@ class BKPyVODESystem:
         I_u = max(0.0, I_u)
         V_u = max(0.0, V_u)
         F_rr = min(1.0, max(0.0, F_rr))
+        F_rr_u = min(1.0, max(0.0, F_rr_u))
 
         # --- Drug administration -------------------------------------------
         # Continuous dosing: while within [start, stop) the intensity relaxes
@@ -583,9 +597,26 @@ class BKPyVODESystem:
         else:
             dF_rrdt = 0.0
 
+        # Urinary pool tracks its own rearranged fraction. The rr advantage
+        # is weakened (uro_rr_advantage) because urothelial production is
+        # shedding-driven, not S-phase-coupled; plus continuous mixing as
+        # kidney virions drain into the bladder carrying F_rr.
+        uro_pressure = p['uro_rr_advantage'] * I_u
+        kidney_inflow = p['drain_kidney'] * V
+        if p['nccr_emergence_enabled'] >= 0.5:
+            dF_rr_udt = (
+                p['nccr_emergence_rate'] * uro_pressure * (1.0 - F_rr_u)
+                + p['nccr_selection_rate'] * uro_pressure * F_rr_u * (1.0 - F_rr_u)
+                - p['nccr_reversion_rate'] * F_rr_u
+                + kidney_inflow * (F_rr - F_rr_u) / max(V_u, 1e-6)
+            )
+        else:
+            dF_rr_udt = 0.0
+
         return np.array([dVdt, dTdt, dG_vdt, dCdt, dIdt, dDdt, dCCdt, dDNAdt,
                         dEdt, dIFNdt, dAKdt, dD_tacdt, dD_sirdt, dP_repdt, dP_immunedt,
-                        dT_naivedt, dT_effdt, dC_udt, dI_udt, dV_udt, dF_rrdt])
+                        dT_naivedt, dT_effdt, dC_udt, dI_udt, dV_udt, dF_rrdt,
+                        dF_rr_udt])
     
     def get_initial_conditions(self, cell_count: float = 1.0) -> np.ndarray:
         """Get initial conditions for the ODE system.
@@ -617,7 +648,8 @@ class BKPyVODESystem:
             1.0,          # C_u: full urothelial compartment
             0.0,          # I_u: no urothelial infection
             0.0,          # V_u: no urinary viral load
-            0.0,          # F_rr: archetype NCCR at transmission
+            0.0,          # F_rr: archetype NCCR at transmission (kidney)
+            0.0,          # F_rr_u: archetype NCCR at transmission (urinary)
         ])
     
     def get_infection_conditions(self, viral_load: float = 0.5) -> np.ndarray:

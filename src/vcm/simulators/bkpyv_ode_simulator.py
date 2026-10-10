@@ -449,7 +449,10 @@ class BKPyVODESimulator(BaseSimulator):
         # config overrides remain the F_rr=0 endpoint (archetype baseline)
         # so calibration/sensitivity work is unaffected.
         if len(y0) > 20:
-            y0[20] = 1.0 if nccr_variant == "rearranged" else 0.0
+            rr_seed = 1.0 if nccr_variant == "rearranged" else 0.0
+            y0[20] = rr_seed  # kidney pool
+            if len(y0) > 21:
+                y0[21] = rr_seed  # urinary pool
         
         return y0
     
@@ -474,6 +477,7 @@ class BKPyVODESimulator(BaseSimulator):
         I_u = float(y[18]) if len(y) > 18 else 0.0
         V_u = float(y[19]) if len(y) > 19 else 0.0
         F_rr = float(y[20]) if len(y) > 20 else 0.0
+        F_rr_u = float(y[21]) if len(y) > 21 else 0.0
         
         # Create new state based on template
         new_state = copy.deepcopy(template_state)
@@ -556,6 +560,7 @@ class BKPyVODESimulator(BaseSimulator):
         new_state.metadata["urothelial_infected_cells"] = I_u
         new_state.metadata["urine_viral_load"] = max(0.0, V_u)
         new_state.metadata["nccr_rearranged_fraction"] = F_rr
+        new_state.metadata["nccr_rearranged_fraction_urine"] = F_rr_u
         new_state.metadata["intracellular_replication_flux"] = float(max(0.0, V * (T / (T + 0.5))))
         new_state.metadata["viral_production_rate"] = float(max(0.0, P_rep * T))
         new_state.metadata["immune_control_index"] = float(max(0.0, min(1.0, P_immune)))

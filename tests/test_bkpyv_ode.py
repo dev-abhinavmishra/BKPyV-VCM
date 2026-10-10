@@ -36,7 +36,7 @@ class TestBKPyVODESystem:
         """Test that state vector names are correctly defined."""
         ode_system = BKPyVODESystem()
         names = ode_system.get_state_vector_names()
-        assert len(names) == 21
+        assert len(names) == 22
         assert 'V' in names  # Viral load
         assert 'T' in names  # T antigen
         assert 'C' in names  # Healthy cells
@@ -691,7 +691,8 @@ class TestNCCREmergence:
 
     def test_state_vector_is_21d_with_frr_last(self):
         names = BKPyVODESystem().get_state_vector_names()
-        assert names[-1] == 'F_rr'
+        assert names[-2] == 'F_rr'
+        assert names[-1] == 'F_rr_u'
         assert len(BKPyVODESystem().get_initial_conditions()) == len(names)
 
     def test_frr_emerges_under_sustained_viremia(self):
@@ -716,6 +717,7 @@ class TestNCCREmergence:
         cell = plugin.create_initial_state({"nccr_variant": "rearranged"})
         y0 = sim._cellstate_to_ode(cell)
         assert y0[20] == pytest.approx(1.0)
+        assert y0[21] == pytest.approx(1.0)  # urinary pool seeded too
         early, capsid = sim.ode_system._nccr_multipliers(1.0)
         assert early == pytest.approx(2.0)
         assert capsid == pytest.approx(0.5)
@@ -781,3 +783,44 @@ class TestReductionSchedules:
                                        sir_trough=4.0)
         assert hold["final_frr"] > 0.8
         assert conversion["final_frr"] < hold["final_frr"]
+
+    def test_rr_enriched_in_plasma_not_urine(self):
+        """Gosert 2008 signature: the rearranged fraction enriches in the
+        kidney (plasma) pool relative to the urinary pool — urothelial
+        production is shedding-driven so the rr advantage is weaker."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y, None),
+            (0, 120), y0, t_eval=np.linspace(0, 120, 121), method='LSODA',
+        )
+        f_k, f_u = sol.y[20], sol.y[21]
+        assert f_k[-1] > 2.0 * f_u[-1]
+        assert np.all((f_u >= 0.0) & (f_u <= 1.0))
+
+
+class TestScreeningPolicies:
+    """Screening-trigger policy ordering (Kotton 2024 logic, mechanistic)."""
+
+    def test_early_trigger_suppresses_emergence(self):
+        """Acting at the 1k screening trigger leaves the kidney pool
+        archetype-dominated; never acting lets rr variants take over."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        from screening_policy_analysis import run_policy
+
+        early = run_policy(1_000.0)
+        never = run_policy(float("inf"))
+        assert early["clearance_weeks"] is not None
+        assert early["final_frr_kidney"] < 0.1
+        assert never["final_frr_kidney"] > 0.5
+
+    def test_later_triggers_lose_efficacy(self):
+        """Monotone clinical ordering: earlier action -> earlier clearance
+        and less T-cell rebound."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        from screening_policy_analysis import run_policy
+
+        screen = run_policy(1_000.0)
+        pyvan = run_policy(10_000.0)
+        assert screen["clearance_weeks"] < pyvan["clearance_weeks"]
+        assert screen["rebound_index"] < pyvan["rebound_index"]

@@ -330,6 +330,8 @@ def run_compartment_signatures(y_peak):
     sol = simulate(y_peak, t_eval)  # sustained untreated viremia
     v_ratio = float(sol.y[19, -1] / max(sol.y[0, -1], 1e-12))
     f_final = float(sol.y[20, -1])
+    f_u_final = float(sol.y[21, -1])
+    rr_enrichment = float(sol.y[20, -1] / max(sol.y[21, -1], 1e-9))
 
     sol_tac = simulate(y_peak, t_eval,
                        dosing_context={"tacrolimus": {"start": 0.0, "stop": None,
@@ -339,11 +341,16 @@ def run_compartment_signatures(y_peak):
     results = {
         "urine_to_plasma_v_ratio_final": v_ratio,
         "frr_at_day120": f_final,
+        "frr_urine_at_day120": f_u_final,
+        "rr_plasma_to_urine_enrichment": rr_enrichment,
         "teff_peak_tac_vs_untreated": teff_suppressed,
     }
     checks = {
         "urine_dominates_plasma": v_ratio >= 50.0,
         "rr_nccr_emerges_by_week17": f_final >= 0.5,
+        # Gosert 2008: rr-NCCR ~22% of plasma loads vs ~4% of urine loads —
+        # plasma enrichment must emerge, magnitude reported for inspection.
+        "rr_enriched_in_plasma_vs_urine": rr_enrichment >= 2.0,
         "tacrolimus_suppresses_tcell_arm": teff_suppressed <= 0.5,
     }
     return results, checks
@@ -546,6 +553,8 @@ def main():
           f"-> {'PASS' if signature_checks['rr_nccr_emerges_by_week17'] else 'FAIL'} (>=0.5)")
     print(f"  T_eff peak under tac / untreated: {signatures['teff_peak_tac_vs_untreated']:.2f} "
           f"-> {'PASS' if signature_checks['tacrolimus_suppresses_tcell_arm'] else 'FAIL'} (<=0.5)")
+    print(f"  rr-NCCR plasma:urine enrichment: {signatures['rr_plasma_to_urine_enrichment']:.1f}x "
+          f"-> {'PASS' if signature_checks['rr_enriched_in_plasma_vs_urine'] else 'FAIL'} (>=2x; Gosert ~5x)")
     print(f"\nOVERALL: {'PASS' if report['overall_pass'] else 'CHECK OUTPUT'}")
 
 
