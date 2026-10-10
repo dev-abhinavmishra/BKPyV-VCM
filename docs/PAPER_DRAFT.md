@@ -164,6 +164,16 @@ pre-rebound data alone — which is itself the model's statement that
 rebound is *not forecastable from early viremia* without a reservoir
 readout.
 
+Two of the failure modes are not accuracy gaps but *mechanism
+pointers*: the transient surges the fitted curves cannot reach
+(00107 week-50 bump, 06119's spike, 27447's rebound) are exactly
+what the model's latent-reservoir (`L`) and stochastic-reactivation
+arms generate — discrete release events, not smooth dynamics. The
+falsy part of the fit therefore names the next experiment: fitting
+with reservoir-release events enabled, and obtaining the urine +
+PBMC series that would constrain `L`. A model whose residuals point
+at its own missing mechanism is behaving like a model should.
+
 ### 3.4 Supporting biology
 
 GSE317012 single-cell reanalysis (26 biopsies; 34,987 QC-passing
