@@ -868,3 +868,16 @@ class TestNovelExtensions:
         exp = genotype_outcome("CYP3A5 expressor (*1 carrier)", n=40)
         assert exp["effective_trough"] < non["effective_trough"]
         assert exp["median_onset_weeks"] > non["median_onset_weeks"]
+
+    def test_c2c_channel_persists_under_clearance(self):
+        """Cell-to-cell spread (V-independent) raises the infected-cell
+        reservoir under deep extracellular clearance vs free-virion-only —
+        modest by construction, direction is the signature."""
+        ode_free = BKPyVODESystem(params={'c2c_rate': 0.0, 'delta': 3.0, 'p': 1.0})
+        ode_c2c = BKPyVODESystem(params={'c2c_rate': 0.1, 'delta': 3.0, 'p': 1.0})
+        y0 = ode_free.get_infection_conditions(0.3)
+        i_free = solve_ivp(lambda t, y: ode_free.ode_system(t, y, None),
+                           (0, 120), y0, t_eval=[120.0], method='LSODA').y[4, -1]
+        i_c2c = solve_ivp(lambda t, y: ode_c2c.ode_system(t, y, None),
+                          (0, 120), y0, t_eval=[120.0], method='LSODA').y[4, -1]
+        assert i_c2c > i_free

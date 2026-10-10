@@ -109,7 +109,11 @@ class BKPyVODESystem:
         """
         return {
             # Viral dynamics parameters
-            'beta': 0.3,           # Infection rate (1/day), target-cell limited
+            'beta': 0.3,           # Free-virion infection rate (1/day)
+            'c2c_rate': 0.03,      # Cell-to-cell transmission (1/day) — direct
+                                   # contact spread, V-independent (virological
+                                   # synapse): antibody/extracellular-clearance
+                                   # insensitive, reservoir-persistence channel
             'delta': 0.4,          # Viral clearance rate (1/day) ≈ t1/2 1.7 d; within
                                    # the range reported after intervention change by
                                    # Funk 2006 (t1/2 6h-17d). NOT the 1-2h
@@ -493,7 +497,13 @@ class BKPyVODESystem:
         # cross-feeding term (Funk 2008: urothelial amplification reseeds the
         # graft) — kept deliberately small so it is a persistence mechanism,
         # not a primary driver.
-        infection_rate = p['beta'] * (V + p['cross_feed'] * V_u) * C
+        # Two transmission modes: free-virion spread (V-dependent — cleared
+        # by delta/AK) and direct cell-to-cell spread via virological
+        # synapses (V-independent — structurally shielded from
+        # extracellular clearance; the reason an established focus persists
+        # under strong humoral/antiviral pressure).
+        infection_rate = (p['beta'] * (V + p['cross_feed'] * V_u)
+                          + p['c2c_rate'] * I) * C
         cell_death = p['d_cell'] * C
         dCdt = p['lambda_cell'] - infection_rate - cell_death
 
