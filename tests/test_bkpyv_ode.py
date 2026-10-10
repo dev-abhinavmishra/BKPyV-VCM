@@ -917,3 +917,22 @@ class TestNovelExtensions:
                          (0, 120), ode_nolat.get_infection_conditions(0.3),
                          t_eval=[120.0], method='LSODA')
         assert sol.y[4, -1] > sol2.y[4, -1] * 0.9  # reservoir feeds I
+
+    def test_vst_transient_only_under_tac(self):
+        """VST bolus: large infusion dips transiently but never durably
+        clears under maintained tac 8 (homeostatic ceiling + blocked
+        expansion); conversion control still clears."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent
+                               / "scripts"))
+        import tcell_therapy_simulation as vst
+        t8, cp8, _ = vst.simulate_with_vst(vst._tac(8.0), 28.0, 4.0)
+        post8 = cp8[t8 >= 28.0]
+        t0, cp0, _ = vst.simulate_with_vst(vst._tac(8.0), 28.0, 0.0)
+        post0 = cp0[t0 >= 28.0]
+        assert post8.min() < post0.min()              # transient dip exists
+        assert np.isinf(vst._clearance_week(t8, cp8))  # no durable clearance
+        conv = {"tacrolimus": [{"start": 0, "stop": 28, "trough_ng_ml": 8.0},
+                               {"start": 28, "stop": None, "trough_ng_ml": 3.0}],
+                "sirolimus": [{"start": 28, "stop": None, "trough_ng_ml": 4.0}]}
+        tc, cpc, _ = vst.simulate_with_vst(conv, 28.0, 0.0)
+        assert vst._clearance_week(tc, cpc) < 12.0     # control clears

@@ -122,11 +122,15 @@ streamlit run src/vcm/ui/streamlit_app.py        # 12 pages
   posterior median 7.0-7.2 vs truth 6.7-7.1, honest intervals.
 - generate_figures.py: 4-panel publication composite ->
   outputs/figures/composite_figure.png.
-- Suite: 217 tests / 8 skipped; benchmark PASS post-c2c and post-L.
+- Suite: 219 tests / 8 skipped; benchmark PASS post-c2c and post-L.
 - L compartment (index 22): latent_fraction 0.02 of new infections
   aborts into latency; reactivation_flux = lat_reactivation * L *
   (1 - tac_immune_effect) feeds I — mechanistic reservoir behind
   reactivation_onset.py and the mid-clearance resurge channel.
+- tcell_therapy_simulation.py: VST bolus arm — transient-only under
+  tac (ceiling + blocked expansion); honest negative-finding arc.
+- Streamlit "Findings" page (12th): posterior-forecast demo + onset
+  explorer live; AppTest-verified (median 7.0wk CI, 6.4wk onset).
 - RESEARCH QUEUE for next session: agnoprotein latency compartment
   (Lat state feeding reactivation_onset mechanistically — replaces
   the phenomenological hazard), Bayesian fit of the virtual cohort

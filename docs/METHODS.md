@@ -203,6 +203,12 @@ Mechanism notes:
   infected reservoir under deep suppression: the persistence
   channel that explains why viremia resurges after interruption.
 
+- `scripts/tcell_therapy_simulation.py` — VST digital twin: exogenous
+  T_eff bolus under maintained tacrolimus. Emergent result: transient
+  dips only at ~4x homeostatic ceiling, never durable clearance —
+  ceiling (1 - T_eff/carry) + calcineurin-blocked expansion, with the L
+  reservoir and c2c spread reseeding. Matches the documented VST
+  pattern (transient responses; durability tracks in-vivo expansion).
 - `scripts/optimal_control_analysis.py` — (conversion day, sir trough)
   as continuous controls; Nelder-Mead on weeks-to-clear + rebound AUC.
   Derived optimum: earliest feasible switch + max mTOR signal; delay
