@@ -63,7 +63,7 @@ def test_all_ten_pages_render_with_expected_content():
     at.run()
     assert len(at.exception) == 0
     options = list(at.sidebar.radio[0].options)
-    assert len(options) == 10
+    assert len(options) == 11
 
     expectations = {
         "Home": lambda a: any("Welcome to the BKPyV" in m.value for m in a.markdown),
@@ -81,6 +81,7 @@ def test_all_ten_pages_render_with_expected_content():
             "Parameters & Assumptions" in m.value for m in a.markdown
         ),
         "Review Bundle": lambda a: any("Generate review bundle" in b.label for b in a.button),
+        "Regimen Design": lambda a: any("Regimen Design" in m.value for m in a.markdown),
         "Documentation": lambda a: any("Clinical Background" in s.value for s in a.subheader),
     }
     for name, check in expectations.items():

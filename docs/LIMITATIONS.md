@@ -63,3 +63,26 @@ Ordered roughly by severity. Each item states the boundary plainly.
 14. **UMAP geometry is stochastic at the ~1% level** even with fixed seeds
     (BLAS/threading); cluster identities and counts are deterministic but
     embedding coordinates may differ in the last decimal.
+
+## Multi-compartment extension (21-dim) caveats
+
+- **Urothelial block is population-level** — no per-cell TAg/S-phase gates
+  (the tissue-level Funk 2008 formulation); intracellular mechanism lives
+  only in the kidney block.
+- **F_rr is a single pool-wide fraction**, not per-compartment
+  quasi-species — the model cannot express Gosert's plasma-vs-urine rr
+  enrichment difference; it predicts *average* emergence.
+- **PK layer is a maintenance-trough approximation** (first-order
+  approach to target trough at elimination t½); peak-trough oscillation
+  is averaged out — appropriate for week-scale regimen questions, not
+  dose-timing questions.
+- **Rejection proxy is T_eff rebound AUC** — the model cannot separate
+  BKPyV-specific from alloreactive immunity, so rebound is an honest
+  *index*, not a predicted biopsy-proven rejection rate.
+- **Identifiability is limited by design**: plasma-V data alone cannot
+  learn urine-compartment, T-cell-source, or drug-PD parameters
+  (sensitivity ~0); patient fitting must be restricted to the
+  plasma-visible parameter subset or use urine+plasma series together.
+- Emergent multipliers interpolate between archetype/rearranged
+  endpoints — explicit `nccr_*_expression_multiplier` config overrides
+  pin the F_rr=0 endpoint, not a fixed genotype.

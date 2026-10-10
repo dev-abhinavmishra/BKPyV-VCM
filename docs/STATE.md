@@ -6,23 +6,25 @@ Audit date: 2026-10-05. Branch: `devin/finish-vcm`.
 
 | Area | Path | Status |
 |---|---|---|
-| Canonical engine | `src/vcm/simulators/ode_system.py` | Working — 15-dim ODE, per-day rates |
+| Canonical engine | `src/vcm/simulators/ode_system.py` | Working — **21-dim ODE**, per-day rates (+T-cell arm, urinary compartment, NCCR quasi-species) |
 | ODE wrapper | `src/vcm/simulators/bkpyv_ode_simulator.py` | Working |
 | Legacy simulator | `src/vcm/simulators/bkpyv_simulator.py` | Working, **superseded for analysis** (see below) |
 | Plugin/parameters | `src/vcm/plugins/transplant/bk_polyomavirus/` | Working |
 | Clinical bridge | `src/vcm/clinical/viral_load_mapper.py` | Working — assumption-labelled V→cp/mL anchors |
 | Risk prediction | `src/vcm/clinical/risk_prediction.py` | Working — illustrative ORs, not fitted |
-| Dashboard | `src/vcm/ui/streamlit_app.py` | Working — 10 pages |
+| Dashboard | `src/vcm/ui/streamlit_app.py` | Working — 11 pages (+💉 Regimen Design) |
 | Review bundle | `src/vcm/viz/bkpyv_review.py` | Working |
 | GSE317012 biopsy pipeline | `scripts/analyze_gse317012.py` | Working — 26 samples, pathway scores |
 | GSE317012 cell-level pipeline | `scripts/cluster_gse317012.py` | **Added this session** — QC/cluster/DE/holdout |
 | GEO download | `scripts/download_gse317012.py` | **Added this session** — 1.9 GB, sha256-verified |
-| Viral-load benchmark | `scripts/benchmark_viral_load.py` | **Added this session** |
+| Viral-load benchmark | `scripts/benchmark_viral_load.py` | **Added this session** — now incl. compartment-signature checks (urine:plasma, F_rr, T_eff) |
+| Regimen optimizer | `scripts/optimize_reduction_schedule.py` | **Added Oct 2026** — ng/mL taper/conversion sweep vs T_eff rebound |
+| Identifiability | `scripts/identifiability_analysis.py` | **Added Oct 2026** — per-observable sensitivity ranks |
 | Validators | `validate_bkpyv.py`, `validate_isef.py` | Working — **fixed this session** |
 
 ## What runs
 
-- `pytest tests/` — **198 tests pass** (was 184 passing before this session;
+- `pytest tests/` — **208 tests pass** (was 184 passing before this session;
   +14 new: benchmark metrics, sha256 helper, holdout split, e2e smoke).
 - `validate_bkpyv.py` — exits 0 (after fix, see below).
 - `validate_isef.py` — 4/4 pattern checks PASS, "EXCELLENT" (after fix).
@@ -49,7 +51,7 @@ Audit date: 2026-10-05. Branch: `devin/finish-vcm`.
    committed, hash check case-sensitive). New one-command script with
    `.part` resume + sha256 verification; all 26 GSM samples restored.
 
-## ODE state variables (bkpyv_ode, 15 dims, per-day)
+## ODE state variables (bkpyv_ode, 21 dims, per-day)
 
 | # | State | Meaning | Source/basis |
 |---|-------|---------|--------------|
@@ -68,6 +70,12 @@ Audit date: 2026-10-05. Branch: `devin/finish-vcm`.
 | 12 | D_sir | sirolimus concentration | dosing context |
 | 13 | P_rep | replication pathway activity | module score |
 | 14 | P_immune | immune pathway activity | module score |
+| 15 | T_naive | BKPyV-specific naive T cells | tac-inhibited priming (NFAT) |
+| 16 | T_eff | BKPyV-specific effector T cells | antigen-driven expansion/kill |
+| 17 | C_u | healthy urothelial cells | Funk 2008 urinary reservoir |
+| 18 | I_u | infected urothelial cells | >95% of urinary load |
+| 19 | V_u | urinary virion pool | urine:plasma ~3000:1 |
+| 20 | F_rr | rearranged-NCCR fraction | Gosert 2008 emergence dynamics |
 
 ## Parameters with sources
 

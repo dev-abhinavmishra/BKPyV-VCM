@@ -6,18 +6,18 @@
     "drug_effects": {
       "pattern_tacrolimus_enhancement": {
         "pass": true,
-        "baseline": 1.9262489606260238,
-        "tacrolimus": 2.1817829512442604,
-        "ratio": 1.1326588597017018,
+        "baseline": 1.934350818540386,
+        "tacrolimus": 2.2975330343524147,
+        "ratio": 1.1877540580183263,
         "expected_ratio": "> 1.0",
         "reference": "Hirsch HH et al., Am J Transplant 2016",
         "confidence": "HIGH"
       },
       "pattern_sirolimus_inhibition": {
         "pass": true,
-        "tacrolimus": 2.1817829512442604,
-        "sirolimus": 1.1176360118182243,
-        "ratio": 0.5122581103591637,
+        "tacrolimus": 2.2975330343524147,
+        "sirolimus": 1.2571210463737892,
+        "ratio": 0.5471612497306803,
         "expected_ratio": "< 1.0",
         "reference": "Hirsch HH et al., Am J Transplant 2016",
         "confidence": "HIGH"
@@ -26,9 +26,9 @@
     "cell_cycle_permissiveness": {
       "pattern_cell_cycle_permissiveness": {
         "pass": true,
-        "high_cycle": 1.9291718789510088,
-        "low_cycle": 1.923035395021553,
-        "ratio": 1.0031910405525255,
+        "high_cycle": 1.9351698842025917,
+        "low_cycle": 1.9334804492915003,
+        "ratio": 1.0008737791539142,
         "expected_ratio": "> 1.0",
         "reference": "Weissbach FH et al., J Virol 2024",
         "confidence": "HIGH"
@@ -37,9 +37,9 @@
     "t_antigen_threshold": {
       "pattern_t_antigen_threshold": {
         "pass": true,
-        "low_threshold": 3.023711445609377,
-        "high_threshold": 1.1416063343309557,
-        "ratio": 2.6486463456612115,
+        "low_threshold": 2.8464023773695044,
+        "high_threshold": 1.2572915820477313,
+        "ratio": 2.2639158791897844,
         "expected_ratio": "> 1.0",
         "reference": "BKPyV biology literature",
         "confidence": "MEDIUM"

@@ -2,7 +2,7 @@
 
 ## 1. Model — bkpyv_ode (canonical engine)
 
-15-dimensional ODE, per-day rates, `src/vcm/simulators/ode_system.py`,
+21-dimensional ODE, per-day rates, `src/vcm/simulators/ode_system.py`,
 integrated with `scipy.integrate.solve_ivp` (LSODA).
 
 State: V (free virions), T (intracellular T-antigen), G_v (replication-
@@ -106,3 +106,62 @@ Core structure (see source for the full system):
 Fixed seeds everywhere (numpy `default_rng` seeds, deterministic sort+hash
 for per-cell holdout); rerunning the four pipeline commands reproduces all
 outputs byte-identically up to numeric noise in UMAP.
+
+## 6. Multi-compartment extension (Phase 3, October 2026)
+
+The canonical engine was extended from 15 to **21 state variables**
+(indices appended — never renumbered — so all legacy consumers keep
+working):
+
+| # | State | Meaning | Grounding |
+|---|-------|---------|-----------|
+| 15 | T_naive | BKPyV-specific naive T cells | priming pool, tac-inhibited via calcineurin/NFAT |
+| 16 | T_eff | BKPyV-specific effector T cells | antigen-driven expansion + kill of infected cells |
+| 17 | C_u | healthy urothelial cells | Funk 2008 urinary reservoir |
+| 18 | I_u | infected urothelial cells | >95% of urinary viral load is urothelial origin |
+| 19 | V_u | urinary virion pool | urine:plasma ~3000:1 (Funk 2008) |
+| 20 | F_rr | rearranged-NCCR fraction of virion pool | Gosert 2008; in-host quasi-species dynamics |
+
+Mechanism notes:
+
+- **T-cell arm**: priming `a_tcell·(V+0.5·I)·T_naive` and carrying-capacity
+  expansion are both attenuated by tacrolimus through
+  `tac_tcell_suppression` (calcineurin blockade hits NFAT-driven
+  proliferation — tac does NOT attenuate the kill itself). Effectors kill
+  infected kidney cells via `tcell_kill·T_eff·I`.
+- **Urinary compartment**: population-level `C_u/I_u/V_u` block
+  (no per-cell intracellular gates — the urothelium is a second tissue
+  population, matching the Funk 2008 formulation). Kidney→bladder flow
+  via `drain_kidney·V`; bladder→kidney seeding via `cross_feed·V_u·C`.
+- **NCCR quasi-species**: `dF_rr/dt = μ·pressure·(1-F) + s·pressure·F(1-F)
+  - r·F` where pressure = replication activity. Rearranged variants emerge
+  under sustained viremia and dominate on the Gosert weeks-months
+  timescale; the discrete archetype/rearranged presets are the F=0/F=1
+  boundary conditions. Effective early-gene and capsid multipliers
+  interpolate (early ×1→×2, capsid ×1→×0.5).
+- **Pharmacokinetics**: dosing schedules accept `trough_ng_ml` windows
+  resolved with real elimination half-lives (tac ~12 h, sir ~60 h) and
+  reference troughs (tac 8, sir 4 = Hirsch 2016 in-vitro IC90 anchor).
+  Schedule lists express stepwise tapers; legacy dimensionless targets
+  and bolus events are unchanged.
+
+## 7. Regimen optimization and identifiability
+
+- `scripts/optimize_reduction_schedule.py` sweeps taper and conversion
+  schedules in ng/mL; efficacy = weeks to sustained <1,000 cp/mL;
+  counterweight = T_eff rebound AUC (honest proxy — the model cannot
+  distinguish BKPyV-specific from alloreactive T cells). Emergent result:
+  **tac taper alone never clears within 180 d; tac→sir conversion clears
+  ~wk 8 with lower rebound** — sir closes the S-phase/mTOR gate AND
+  releases the T-cell brake (consistent with Hirsch 2016), arising from
+  mechanism not fitting.
+- `scripts/identifiability_analysis.py` computes normalized
+  d log observable/d log θ sensitivities per observable
+  (plasma V, urine V_u, T-antigen, F_rr): plasma-V data informs only the
+  Nowak-May kinetics core; urine parameters are identifiable only from
+  urine data; drug-PD parameters are unidentifiable without
+  drug-perturbation data; the intracellular gate chain is pairwise
+  confounded (|corr|≈1) — one effective parameter, not five.
+- Benchmark gained compartment-signature checks: urine:plasma ≥50×,
+  F_rr ≥0.5 by wk 17, tac-suppressed T_eff peak ≤0.5× untreated — all
+  PASS in `outputs/benchmark/viral_load_benchmark.json`.

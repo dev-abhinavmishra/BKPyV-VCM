@@ -274,6 +274,7 @@ def st_sidebar_navigation():
             "📈 Viral-Load Validation",
             "🧬 Risk Prediction",
             "📋 Comparison",
+            "💉 Regimen Design",
             "🧾 Parameters & Assumptions",
             "🔎 Review Bundle",
             "📚 Documentation",
@@ -888,6 +889,128 @@ def st_review_bundle_page():
         st.download_button("Download review manifest", Path(paths["manifest"]).read_bytes(), file_name="manifest.json")
 
 
+def st_regimen_design_page():
+    """Interactive immunosuppression-regimen designer on the mechanistic ODE.
+
+    Lets a reviewer dial in real-unit dosing schedules (ng/mL troughs with
+    clinical half-lives) and watch the model trade viral clearance against
+    T-cell rebound — the tac-taper-vs-sir-conversion question the optimizer
+    script answers systematically.
+    """
+    import sys as _sys
+    from pathlib import Path as _Path
+    _scripts = str(_Path(__file__).resolve().parents[3] / "scripts")
+    if _scripts not in _sys.path:
+        _sys.path.insert(0, _scripts)
+
+    st.markdown("## 💉 Regimen Design — mechanistic protocol explorer")
+    st.caption(
+        "Hypothesis generator, not patient advice: every schedule is simulated "
+        "on the 21-dim mechanistic ODE with real drug half-lives "
+        "(tac t½≈12 h, sir t½≈60 h) and real trough units."
+    )
+
+    from optimize_reduction_schedule import evaluate_schedule
+    from vcm.clinical.viral_load_mapper import ViralLoadMapper
+    import numpy as _np
+    from scipy.integrate import solve_ivp as _solve_ivp
+    from vcm.simulators.ode_system import BKPyVODESystem as _ODE
+
+    st.subheader("Design a schedule")
+    mode = st.radio("Regimen family",
+                    ["Tacrolimus taper", "Tacrolimus → sirolimus conversion",
+                     "Preset sweep"],
+                    horizontal=True)
+
+    if mode == "Tacrolimus taper":
+        c1, c2 = st.columns(2)
+        with c1:
+            step_week = st.slider("Reduce at week", 1, 8, 4)
+        with c2:
+            trough = st.slider("Target trough (ng/mL)", 2.0, 8.0, 4.0, 0.5)
+        schedule = [(0.0, step_week * 7.0, 8.0), (step_week * 7.0, None, trough)]
+        sir = None
+    elif mode == "Tacrolimus → sirolimus conversion":
+        c1, c2 = st.columns(2)
+        with c1:
+            step_week = st.slider("Convert at week", 1, 8, 4)
+        with c2:
+            sir = st.slider("Sirolimus trough (ng/mL)", 2.0, 10.0, 4.0, 0.5)
+        schedule = [(0.0, step_week * 7.0, 8.0), (step_week * 7.0, None, 3.0)]
+    else:
+        schedule = None
+        sir = None
+
+    if st.button("Simulate regimen", type="primary"):
+        mapper = ViralLoadMapper()
+        if schedule is not None:
+            with st.spinner("Simulating 180 model days..."):
+                ode = _ODE()
+                y0 = ode.get_infection_conditions(0.5)
+                horizon = 180.0
+                t_eval = _np.linspace(0, horizon, 721)
+                dosing = {"tacrolimus": [
+                    {"start": s, "stop": e, "trough_ng_ml": tr}
+                    for s, e, tr in schedule]}
+                if sir is not None:
+                    dosing["sirolimus"] = [{"start": schedule[-1][0],
+                                            "stop": None,
+                                            "trough_ng_ml": sir}]
+                sol = _solve_ivp(lambda t, y: ode.ode_system(t, y, dosing),
+                                 (0, horizon), y0, t_eval=t_eval,
+                                 method="LSODA")
+                m = evaluate_schedule(schedule, sir_trough=sir)
+
+            st.subheader("Outcome metrics")
+            cols = st.columns(4)
+            cols[0].metric("Viremia clears <1k cp/mL",
+                           "never" if m["clearance_weeks"] is None
+                           else f"week {m['clearance_weeks']}")
+            cols[1].metric("Final log10 cp/mL", m["final_log10_cpml"])
+            cols[2].metric("T-cell rebound index", m["rebound_index"],
+                           help="AUC(T_eff)/horizon — the model's rejection-risk proxy")
+            cols[3].metric("Rearranged NCCR fraction", f"{m['final_frr']:.2f}")
+
+            plasma_cp = mapper.normalized_to_copies(_np.maximum(sol.y[0], 1e-9))
+            urine_cp = mapper.normalized_to_copies(_np.maximum(sol.y[19] / 20.0, 1e-9))
+            import pandas as pd
+            traj = pd.DataFrame({
+                "week": sol.t / 7.0,
+                "plasma cp/mL": plasma_cp,
+                "urine cp/mL (scaled)": urine_cp,
+                "T_eff": sol.y[16],
+                "F_rr": sol.y[20],
+            }).set_index("week")
+            st.subheader("Plasma vs urine viral load (log scale)")
+            st.line_chart(_np.log10(traj[["plasma cp/mL",
+                                          "urine cp/mL (scaled)"]].clip(lower=0.0)))
+            st.subheader("Immune rebound and NCCR evolution")
+            st.line_chart(traj[["T_eff", "F_rr"]])
+        else:
+            with st.spinner("Running full schedule sweep..."):
+                from optimize_reduction_schedule import candidate_schedules
+                rows = []
+                for sched, s, label in candidate_schedules():
+                    m = evaluate_schedule(sched, sir_trough=s)
+                    rows.append({"schedule": label,
+                                 "clears@week": m["clearance_weeks"],
+                                 "final log10": m["final_log10_cpml"],
+                                 "rebound": m["rebound_index"],
+                                 "F_rr": m["final_frr"]})
+            import pandas as pd
+            st.subheader("Schedule sweep — the model's answer")
+            st.dataframe(pd.DataFrame(rows), use_container_width=True)
+            st.info(
+                "Headline result: tacrolimus taper alone never clears "
+                "viremia within 180 days, while tac→sir conversion clears "
+                "by ~week 8 with LOWER T-cell rebound — sirolimus closes "
+                "the S-phase/mTOR permissiveness gate in addition to "
+                "releasing the adaptive-immunity brake. A mechanistic "
+                "hypothesis matching the clinical literature (Hirsch "
+                "2016), not a fitted result."
+            )
+
+
 def st_documentation_page():
     """Display documentation page."""
     st.markdown("## 📚 Documentation")
@@ -1227,6 +1350,8 @@ def main():
         st_risk_prediction_page()
     elif page == "📋 Comparison":
         st_comparison_page()
+    elif page == "💉 Regimen Design":
+        st_regimen_design_page()
     elif page == "🧾 Parameters & Assumptions":
         st_parameters_page()
     elif page == "🔎 Review Bundle":

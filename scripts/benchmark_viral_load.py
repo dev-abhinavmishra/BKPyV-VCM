@@ -313,6 +313,42 @@ def run_nephrectomy_experiment(mapper, y_peak):
     }
 
 
+def run_compartment_signatures(y_peak):
+    """VALIDATION 3: multi-compartment signatures added in the 21-dim model.
+
+    Checks three published qualitative findings the extended model must
+    reproduce rather than fit:
+
+    * urine dominates plasma (Funk 2008: urine loads >> plasma, ~95% of the
+      urinary signal is urothelial production, not kidney drainage)
+    * rearranged NCCR emerges under sustained viremia (Gosert 2008: rr-NCCR
+      marks high-load plasma on a weeks-months timescale)
+    * tacrolimus holds the BKPyV T-cell arm suppressed (the mechanistic
+      reading of tac-associated BKPyV risk)
+    """
+    t_eval = np.linspace(0, 120, 481)
+    sol = simulate(y_peak, t_eval)  # sustained untreated viremia
+    v_ratio = float(sol.y[19, -1] / max(sol.y[0, -1], 1e-12))
+    f_final = float(sol.y[20, -1])
+
+    sol_tac = simulate(y_peak, t_eval,
+                       dosing_context={"tacrolimus": {"start": 0.0, "stop": None,
+                                                      "target": 1.0}})
+    teff_suppressed = float(sol_tac.y[16].max() / max(sol.y[16].max(), 1e-12))
+
+    results = {
+        "urine_to_plasma_v_ratio_final": v_ratio,
+        "frr_at_day120": f_final,
+        "teff_peak_tac_vs_untreated": teff_suppressed,
+    }
+    checks = {
+        "urine_dominates_plasma": v_ratio >= 50.0,
+        "rr_nccr_emerges_by_week17": f_final >= 0.5,
+        "tacrolimus_suppresses_tcell_arm": teff_suppressed <= 0.5,
+    }
+    return results, checks
+
+
 def run_uncertainty(mapper, y_peak, deltas=(0.25, 0.4, 0.6, 0.8)):
     """Sweep delta to show how clearance half-life depends on the calibrated
     parameter — the model's main uncertainty knob for this benchmark."""
@@ -413,6 +449,7 @@ def main():
     calib = run_calibration_experiment(mapper)
     curtail, curtail_checks = run_curtailment_experiment(mapper, y_peak)
     nephrectomy = run_nephrectomy_experiment(mapper, y_peak)
+    signatures, signature_checks = run_compartment_signatures(y_peak)
     uncertainty = run_uncertainty(mapper, y_peak)
 
     # model-vs-published decay comparison (calibration check): does the model
@@ -454,6 +491,8 @@ def main():
             "funk2008_curtailment": {"results": curtail, "checks": curtail_checks,
                                      "all_checks_pass": all(curtail_checks.values())},
             "funk2006_nephrectomy": nephrectomy,
+            "compartment_signatures": {"results": signatures, "checks": signature_checks,
+                                       "all_checks_pass": all(signature_checks.values())},
         },
         "parameter_uncertainty": {
             "description": "pure-clearance t1/2 vs delta (sweep around calibrated 0.4/day)",
@@ -462,6 +501,7 @@ def main():
         "overall_pass": bool(
             calib["within_range"]
             and all(curtail_checks.values())
+            and all(signature_checks.values())
         ),
     }
 
@@ -497,6 +537,13 @@ def main():
     print(f"  Funk 2008 checks: {curtail_checks}")
     print(f"  nephrectomy t1/2: {nephrectomy['predicted_t_half_hours']:.1f} h "
           f"(published arms: 1-2 h fast, 20-38 h sparse)")
+    print("\n=== COMPARTMENT SIGNATURES (Funk 2008 / Gosert 2008) ===")
+    print(f"  urine:plasma V ratio (final): {signatures['urine_to_plasma_v_ratio_final']:.0f}x "
+          f"-> {'PASS' if signature_checks['urine_dominates_plasma'] else 'FAIL'} (>=50x)")
+    print(f"  F_rr at day 120: {signatures['frr_at_day120']:.3f} "
+          f"-> {'PASS' if signature_checks['rr_nccr_emerges_by_week17'] else 'FAIL'} (>=0.5)")
+    print(f"  T_eff peak under tac / untreated: {signatures['teff_peak_tac_vs_untreated']:.2f} "
+          f"-> {'PASS' if signature_checks['tacrolimus_suppresses_tcell_arm'] else 'FAIL'} (<=0.5)")
     print(f"\nOVERALL: {'PASS' if report['overall_pass'] else 'CHECK OUTPUT'}")
 
 
