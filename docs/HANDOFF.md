@@ -122,7 +122,7 @@ streamlit run src/vcm/ui/streamlit_app.py        # 12 pages
   posterior median 7.0-7.2 vs truth 6.7-7.1, honest intervals.
 - generate_figures.py: 4-panel publication composite ->
   outputs/figures/composite_figure.png.
-- Suite: 220 tests / 8 skipped; benchmark PASS post-c2c and post-L.
+- Suite: 219 tests / 8 skipped; benchmark PASS post-c2c and post-L.
 - L compartment (index 22): latent_fraction 0.02 of new infections
   aborts into latency; reactivation_flux = lat_reactivation * L *
   (1 - tac_immune_effect) feeds I — mechanistic reservoir behind

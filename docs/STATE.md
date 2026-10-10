@@ -24,7 +24,7 @@ Audit date: 2026-10-05. Branch: `devin/finish-vcm`.
 
 ## What runs
 
-- `pytest tests/` — **220 tests pass** (was 184 passing before this session;
+- `pytest tests/` — **219 tests pass** (was 184 passing before this session;
   +14 new: benchmark metrics, sha256 helper, holdout split, e2e smoke).
 - `validate_bkpyv.py` — exits 0 (after fix, see below).
 - `validate_isef.py` — 4/4 pattern checks PASS, "EXCELLENT" (after fix).

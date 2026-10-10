@@ -58,7 +58,7 @@ LSODA, per-day rates) tracks two coupled cell compartments:
   a latent reservoir whose reactivation is gated by immunosuppression.
 
 Copies/mL readouts use an explicitly assumption-labelled anchor bridge
-(`viral_load_mapper.py`); the model's invariants are pinned by 220
+(`viral_load_mapper.py`); the model's invariants are pinned by 219
 tests (8 skipped for optional deps).
 
 ### 2.2 Prediction machinery
