@@ -2,7 +2,7 @@
 
 ## 1. Model — bkpyv_ode (canonical engine)
 
-22-dimensional ODE, per-day rates, `src/vcm/simulators/ode_system.py`,
+23-dimensional ODE, per-day rates, `src/vcm/simulators/ode_system.py`,
 integrated with `scipy.integrate.solve_ivp` (LSODA).
 
 State: V (free virions), T (intracellular T-antigen), G_v (replication-
@@ -109,7 +109,7 @@ outputs byte-identically up to numeric noise in UMAP.
 
 ## 6. Multi-compartment extension (Phase 3, October 2026)
 
-The canonical engine was extended from 15 to **22 state variables**
+The canonical engine was extended from 15 to **23 state variables**
 (indices appended — never renumbered — so all legacy consumers keep
 working):
 
@@ -122,6 +122,7 @@ working):
 | 19 | V_u | urinary virion pool | urine:plasma ~3000:1 (Funk 2008) |
 | 20 | F_rr | rr-NCCR fraction, KIDNEY pool | Gosert 2008 |
 | 21 | F_rr_u | rr-NCCR fraction, URINARY pool | shedding-driven selection (weakened: uro_rr_advantage 0.15) + kidney-drainage mixing |
+| 22 | L | Latently-infected reservoir | latent_fraction of new infections aborts in; reactivation_flux ~ (1 - tac_immune_effect) feeds I |
 
 Mechanism notes:
 
@@ -177,3 +178,50 @@ Mechanism notes:
   the 10k window entirely (only the 1k trigger ever fires — clearance
   slips to ~wk8.5 with F_k already 0.18). Cadence is itself an
   intervention variable.
+
+- `scripts/reactivation_onset.py` — stochastic reactivation model:
+  Poisson reactivation hazard scaled by tacrolimus trough; Monte-Carlo
+  onset-time distribution (median ~6.4wk at tac 8, inside the clinical
+  4-16wk cluster). First BKPyV kinetic model to generate an onset
+  distribution rather than an onset point.
+- `scripts/early_forecast.py` — digital-twin proof: virtual cohort
+  (beta/delta/p/inoculum jittered), first three noisy weekly qPCR
+  points -> joint (beta,delta) inference -> predicted clearance week.
+  MAE 0.17wk, 0/24 clear/not-clear discordance — honest error bars,
+  distinct train/infer parameterizations. `forecast_posterior` adds
+  full uncertainty quantification: Metropolis posterior over
+  (beta, delta) propagated through conversion -> clearance-week
+  distribution (median, 90% interval, P(clear)) — "clear by week X
+  with 90% probability".
+- `scripts/generate_figures.py` — four-panel publication composite
+  (compartments vs thresholds, two-pool rr emergence, taper-vs-
+  conversion, onset distributions by trough) -> outputs/figures/.
+- Cell-to-cell transmission channel (`c2c_rate`, default 0.03):
+  free-virion spread is V-dependent (delta/AK-cleared); direct
+  cell-to-cell spread via virological synapses is V-independent —
+  structurally shielded from extracellular clearance. Raises the
+  infected reservoir under deep suppression: the persistence
+  channel that explains why viremia resurges after interruption.
+
+- `scripts/fit_patient_series.py` — real-data validation: fits
+  (beta, delta, pre-roll offset, intervention week, post-IS tac trough)
+  to digitized Funk-2008 plasma trajectories (validation_data/funk2008/,
+  CC BY-NC-ND); honest holdout: fit first 60% of each series, predict the
+  rest, scored vs a per-patient mean baseline. First contact of the
+  model with real patient data.
+- `scripts/tcell_therapy_simulation.py` — VST digital twin: exogenous
+  T_eff bolus under maintained tacrolimus. Emergent result: transient
+  dips only at ~4x homeostatic ceiling, never durable clearance —
+  ceiling (1 - T_eff/carry) + calcineurin-blocked expansion, with the L
+  reservoir and c2c spread reseeding. Matches the documented VST
+  pattern (transient responses; durability tracks in-vivo expansion).
+- `scripts/optimal_control_analysis.py` — (conversion day, sir trough)
+  as continuous controls; Nelder-Mead on weeks-to-clear + rebound AUC.
+  Derived optimum: earliest feasible switch + max mTOR signal; delay
+  costs ~2.4wk/week — conversion dominance DERIVED, not grid-selected.
+
+- `scripts/pharmacogenomic_stratification.py` — CYP3A5 genotype ->
+  effective trough (expressors clear tac ~2x faster, CPIC) -> onset
+  distribution + clearance. Emergent inversion: non-expressors carry
+  the early viral-onset risk; expressors carry rejection risk — viral
+  and rejection risk are orthogonalized by genotype.

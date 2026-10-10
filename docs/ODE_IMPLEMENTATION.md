@@ -15,7 +15,7 @@ This document describes the ODE (Ordinary Differential Equation) based implement
 ### Components
 
 1. **ODE System Definition** (`src/vcm/simulators/ode_system.py`)
-   - Defines the 22-dimensional state vector and differential equations
+   - Defines the 23-dimensional state vector and differential equations
    - Implements research-validated parameters
    - Provides initial conditions and state variable management
 
@@ -32,7 +32,7 @@ This document describes the ODE (Ordinary Differential Equation) based implement
 
 ## State Variables
 
-The ODE system uses 22 state variables (15 core + 7 appended extensions;
+The ODE system uses 23 state variables (15 core + 8 appended extensions;
 indices never renumbered — new states append only):
 
 | Index | Variable | Description | Biological Meaning |
@@ -59,6 +59,7 @@ indices never renumbered — new states append only):
 | 19 | V_u | Urinary virion pool | urine:plasma ~3000:1 |
 | 20 | F_rr | rr-NCCR fraction, kidney pool | In-host quasi-species emergence (Gosert 2008) |
 | 21 | F_rr_u | rr-NCCR fraction, urinary pool | Weakened selection + drainage mixing |
+| 22 | L | Latently-infected reservoir | Seeded by latent_fraction of new infections; reactivates under immunosuppression (1 - tac_immune_effect) |
 
 ## Differential Equations (v2 form, matching `ode_system.py`)
 
@@ -87,8 +88,13 @@ permissiveness AND DNA synthesis are present (Needham 2024).
 ### Cell populations
 
 ```
-dC/dt = lambda_cell - beta * V * C - d_cell * C                 (constant source; NOT logistic)
-dI/dt = beta * V * C - d_infected * I - immune_kill * E * I * tac_immune_effect
+infection_rate = (beta * (V + cross_feed * V_u) + c2c_rate * I) * C
+  — two transmission modes: free virions (V-dependent, cleared by
+  delta/AK; urine reseeds via cross_feed) and cell-to-cell spread
+  via virological synapses (V-independent, clearance-insensitive:
+  the persistence channel)
+dC/dt = lambda_cell - infection_rate - d_cell * C               (constant source; NOT logistic)
+dI/dt = infection_rate - d_infected * I - immune_kill * E * I * tac_immune_effect
 dD/dt = cell_death + infected_death - 0.1 * D
 ```
 
@@ -117,7 +123,8 @@ dE/dt        = e_prod * P_immune/(1+E) - e_decay * E    (self-limiting expansion
 
 | Parameter | Value | Grounding | Description |
 |-----------|-------|-----------|-------------|
-| beta | 0.3 | tuned (classification regime) | Infection rate, 1/day |
+| beta | 0.3 | tuned (classification regime) | Free-virion infection rate, 1/day |
+| c2c_rate | 0.03 | tuned (persistence channel) | Cell-to-cell spread rate, 1/day |
 | delta | 0.4 | Funk 2006 (slow phase) | Viral clearance rate, 1/day |
 | p | 8.0 | tuned | Virion production per infected cell, 1/day |
 | immune_kill | 0.8 | tuned | Effector-cell killing of infected cells |

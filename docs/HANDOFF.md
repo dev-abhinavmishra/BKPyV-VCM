@@ -55,7 +55,7 @@ Streamlit page; 208 tests green.
 .venv/bin/python scripts/benchmark_viral_load.py --quick   # OVERALL: PASS
 .venv/bin/python scripts/optimize_reduction_schedule.py    # regimen table
 .venv/bin/python scripts/identifiability_analysis.py       # sensitivity ranks
-streamlit run src/vcm/ui/streamlit_app.py        # 11 pages
+streamlit run src/vcm/ui/streamlit_app.py        # 12 pages
 ```
 
 ## What's next (highest value first)
@@ -79,7 +79,7 @@ streamlit run src/vcm/ui/streamlit_app.py        # 11 pages
 
 ## Arc 2 additions (commit c8cc551)
 
-- **22-dim**: F_rr_u (index 21) — urinary quasi-species pool, weakened
+- **22-23-dim**: F_rr_u (index 21) — urinary quasi-species pool, weakened
   selection (uro_rr_advantage=0.15, shedding- not S-phase-coupled) +
   kidney-drainage mixing. Gosert plasma>urine rr enrichment EMERGES ~3x.
 - **`scripts/screening_policy_analysis.py`**: trigger-level policy sim —
@@ -98,3 +98,54 @@ streamlit run src/vcm/ui/streamlit_app.py        # 11 pages
   viral_production. Do NOT raise to 1.0 — breaks curtail_50 fidelity.
 - taper-mode paradox worth presenting: taper at ANY trigger -> MORE
   emergence than no action (prolongs selection pressure).
+
+## Novel-extensions arc (devin/novel-extensions, UNMERGED per user)
+
+- reactivation_onset.py: hazard h = 0.005 + 0.0025*(tac-3); median onset
+  6.4wk @tac8. First onset-DISTRIBUTION model.
+- early_forecast.py: 3 noisy weekly points -> (beta,delta) grid -> MAE
+  0.17wk, 0 discordance. The bedside-facing claim.
+- Next candidates: optimal-control derivation, cell-to-cell spread.
+
+## Loop arc 2 (continued, UNMERGED)
+
+- pharmacogenomic_stratification.py: expressor trough 4.8 vs 8.0 ->
+  onset 10.0wk vs 6.4wk; risk orthogonality is the headline.
+
+## Loop arc 3 (continued, UNMERGED)
+
+- c2c transmission channel shipped (c2c_rate 0.03, V-independent
+  spread): benchmark still OVERALL PASS; reservoir-persistence
+  direction pinned by test. Effect is modest by design (10% of beta).
+- forecast_posterior (early_forecast.py): Metropolis UQ over
+  (beta,delta) -> clearance-week median/90%CI/P(clear). Verified:
+  posterior median 7.0-7.2 vs truth 6.7-7.1, honest intervals.
+- generate_figures.py: 4-panel publication composite ->
+  outputs/figures/composite_figure.png.
+- Suite: 219 tests / 8 skipped; benchmark PASS post-c2c and post-L.
+- L compartment (index 22): latent_fraction 0.02 of new infections
+  aborts into latency; reactivation_flux = lat_reactivation * L *
+  (1 - tac_immune_effect) feeds I — mechanistic reservoir behind
+  reactivation_onset.py and the mid-clearance resurge channel.
+- tcell_therapy_simulation.py: VST bolus arm — transient-only under
+  tac (ceiling + blocked expansion); honest negative-finding arc.
+- Streamlit "Findings" page (12th): posterior-forecast demo + onset
+  explorer live; AppTest-verified (median 7.0wk CI, 6.4wk onset).
+- Real-data validation LANDED: validation_data/funk2008/ (6 digitized
+  Funk-2008 plasma series, CC BY-NC-ND, provenance in that README) +
+  scripts/fit_patient_series.py. Cohort holdout MAE 0.82 vs 1.36 log10
+  baseline; 5/6 win-or-tie (only refractory 00885 ties). Refit after a
+  49x timeline audit-fix IMPROVED results; fitted params now real
+  clinical units (IS-reduction wk 11-89, pre-roll 20-400d). Documented
+  limits: model plasma cap ~6 log10 (Pat 06119 ~7.7 unreachable),
+  refractory 00885. Audit note: loaders return RAW units; convert at
+  the sim boundary only — self-consistent x7 bugs hide in metrics but
+  show in axes.
+- Competition packaging LANDED: docs/PAPER_DRAFT.md (full paper),
+  ISEF_ABSTRACT.md (218w), PRESENTATION_POINTS.md (judge Q&A),
+  outputs/figures/{composite_figure,patient_fits}.png.
+- RESEARCH QUEUE for next session: agnoprotein latency compartment
+  (Lat state feeding reactivation_onset mechanistically — replaces
+  the phenomenological hazard), Bayesian fit of the virtual cohort
+  to Thompson's series when it arrives, Streamlit poster-mode page
+  rendering the composite + UQ demo.
