@@ -9,9 +9,11 @@ The ODE system is based on standard virus-host modeling approaches extended with
 - Pathway activity dynamics
 - Cell cycle progression
 - Immune response kinetics
+- BKPyV-specific adaptive T-cell arm (activation → clonal expansion → CTL killing)
+- A urinary/urothelial compartment with kidney↔bladder cross-feeding
 - Research-validated parameters from clinical studies
 
-State Variables (15-dimensional vector):
+State Variables (20-dimensional vector):
 1. V: Viral load (normalised scale; see clinical.viral_load_mapper for the bridge to copies/mL)
 2. T: Large T-antigen level (arbitrary units)
 3. G_v: Viral gene expression level (arbitrary units)
@@ -21,7 +23,7 @@ State Variables (15-dimensional vector):
 7. CC: Cell-cycle permissiveness (bounded 0-1; relaxation toward replication-pathway drive,
         NOT an oscillating clock — previous versions used an unbounded ramp that never reset)
 8. DNA: Host DNA synthesis activity
-9. E: Effector immune cells (BKPyV-specific cellular response proxy)
+9. E: Effector immune cells (innate/nonspecific cellular response proxy)
 10. IFN: Interferon concentration
 11. AK: Antiviral state
 12. D_tac: Tacrolimus dosing intensity (dimensionless, 0 = none, ~1 = full immunosuppression;
@@ -29,6 +31,13 @@ State Variables (15-dimensional vector):
 13. D_sir: Sirolimus dosing intensity (same convention)
 14. P_rep: DNA replication pathway activity
 15. P_immune: Innate immune pathway activity
+16. T_naive: BKPyV-specific naive/precursor T cells (repertoire fraction)
+17. T_eff: BKPyV-specific effector T cells (the antigen-driven CTL arm; distinct
+          from the nonspecific E proxy — clinically the arm measured by T-cell
+          monitoring assays and boosted by virus-specific T-cell therapy)
+18. C_u: Healthy urothelial cells (urinary/bladder compartment, fraction)
+19. I_u: Infected urothelial cells (fraction)
+20. V_u: Urinary viral load (virions in the bladder/urine compartment)
 
 Time unit: all rate constants are PER DAY. Clinical interpretation should compare against
 weeks-scale plasma DNAemia (Funk 2006, PMID 16323135) rather than in-vitro hours.
@@ -38,11 +47,23 @@ Research Grounding:
   sirolimus inhibits BKPyV replication via mTOR, IC90 ~ 4 ng/mL; tacrolimus
   increases replication in primary RPTECs). Modelled here as immune-control
   weakening (tacrolimus) and S-phase/production permissiveness (sirolimus).
+  Tacrolimus additionally suppresses the virus-specific T-cell arm more
+  strongly than the innate arm — calcineurin/NFAT blockade's primary clinical
+  target is T-cell activation (Kotton et al., Transplantation 2024 consensus).
 - Viral clearance kinetics: Funk et al., J Infect Dis 2006;193:80-87
   (PMID 16323135; decay half-lives in patients).
 - Host-cell pathway biology: Weissbach et al., J Virol 2024;98(12):e01382-24
   (single-cell transcriptomics of BKPyV in primary RPTECs); Needham et al.,
   PLoS Pathog 2024;20(12):e1012663 (host S phase precedes large T antigen).
+- Urinary tract dynamics: Funk et al., Am J Transplant 2008;8 (within-host
+  two-compartment model: kidney replication seeds the urothelium, which
+  amplifies and dominates the urinary load — >95% of urine load is urothelial,
+  urine ~3000× plasma — with cross-feeding back to the kidney). The urothelial
+  compartment is deliberately population-level (no per-cell T-antigen gates):
+  production is an aggregate amplification term, matching Funk's formulation.
+- Virus-specific T-cell control is the clinical determinant of clearance
+  (Kotton 2024 consensus; the basis for virus-specific T-cell therapy), so the
+  T-cell arm is modelled explicitly rather than folded into the generic E pool.
 """
 
 import numpy as np
@@ -160,6 +181,47 @@ class BKPyVODESystem:
             # Hill function parameters
             'hill_coeff': 4.0,     # Hill coefficient for smooth gates (CC/DNA)
             'half_saturation': 0.5,  # Half-saturation constant (T-antigen→production map)
+
+            # --- BKPyV-specific T-cell arm (adaptive immunity) ------------
+            # Naive cells are replenished slowly and primed by antigen drive
+            # (free virions + infected-cell display); effectors expand
+            # antigen-dependently and kill infected cells. Tacrolimus blocks
+            # activation/expansion (calcineurin→NFAT), not the cytolytic hit.
+            'lambda_tcell': 0.005,        # Naive T-cell replenishment (1/day)
+            'a_tcell': 0.3,               # Antigen-driven priming rate (1/day)
+            'd_tcell': 0.005,             # Naive T-cell turnover (1/day; long-lived)
+            'prolif_tcell': 0.6,          # Effector clonal expansion rate (1/day)
+            'tcell_carry': 1.0,           # Effector carrying capacity (fraction scale)
+            'd_teff': 0.05,               # Effector T-cell decay (1/day; t½ ~14 d)
+            'tcell_kill': 0.25,           # Infected-cell killing per unit T_eff (1/day)
+            'tcell_antigen_i_weight': 0.5, # Infected-cell contribution to antigen drive
+            'tac_tcell_suppression': 12.0, # Tacrolimus blockade of T-cell priming/
+                                          # expansion — much stronger than the
+                                          # innate-arm effect (calcineurin's
+                                          # primary target; clinical troughs are
+                                          # several× the T-cell-proliferation IC50)
+
+            # --- Urinary/urothelial compartment (Funk 2008) ----------------
+            # Population-level bladder compartment: kidney virions drain into
+            # urine and seed urothelial infection; the urothelium amplifies
+            # (>95% of the urine load is urothelial-derived); a small fraction
+            # feeds back onto the kidney (cross-feeding). No intracellular
+            # gates here — production is aggregate, per Funk's formulation.
+            'lambda_u': 0.05,             # Urothelial regeneration source (cells/day)
+            'd_cell_u': 0.03,             # Urothelial natural turnover (1/day)
+            'd_infected_u': 0.2,          # Infected urothelial death (1/day)
+            'beta_u': 0.8,                # Urothelial infection rate (1/day)
+            'seed_kidney_u': 0.05,        # Kidney→urothelium seeding pressure on V
+            'p_u': 500.0,                 # Urothelial virion production per infected
+                                          # cell (1/day) — amplification compartment
+            'drain_kidney': 0.5,          # Kidney virions appearing in urine (1/day)
+            'delta_u': 0.5,               # Urinary clearance/washout (1/day)
+            'immune_kill_u': 0.1,         # Sparse bladder immune surveillance per E
+            'cross_feed': 0.0005,         # Bladder→kidney reinfection pressure on V_u;
+                                          # deliberately weak — viruria without
+                                          # viremia is clinically common, so the
+                                          # bladder reservoir can sustain only
+                                          # low-level reseeding
         }
     
     def get_state_vector_names(self) -> list[str]:
@@ -169,21 +231,26 @@ class BKPyVODESystem:
             List of state variable names
         """
         return [
-            'V',      # Viral load
-            'T',      # T antigen concentration
-            'G_v',    # Viral gene expression
-            'C',      # Healthy target cells
-            'I',      # Infected cells
-            'D',      # Dead/damaged cells
-            'CC',     # Cell cycle phase
-            'DNA',    # DNA synthesis activity
-            'E',      # Effector immune cells
-            'IFN',    # Interferon concentration
-            'AK',     # Antiviral state
-            'D_tac',  # Tacrolimus concentration
-            'D_sir',  # Sirolimus concentration
-            'P_rep',  # DNA replication pathway activity
-            'P_immune' # Innate immune pathway activity
+            'V',       # Viral load
+            'T',       # T antigen concentration
+            'G_v',     # Viral gene expression
+            'C',       # Healthy target cells
+            'I',       # Infected cells
+            'D',       # Dead/damaged cells
+            'CC',      # Cell cycle phase
+            'DNA',     # DNA synthesis activity
+            'E',       # Effector immune cells
+            'IFN',     # Interferon concentration
+            'AK',      # Antiviral state
+            'D_tac',   # Tacrolimus concentration
+            'D_sir',   # Sirolimus concentration
+            'P_rep',   # DNA replication pathway activity
+            'P_immune',# Innate immune pathway activity
+            'T_naive', # BKPyV-specific naive T cells
+            'T_eff',   # BKPyV-specific effector T cells
+            'C_u',     # Healthy urothelial cells
+            'I_u',     # Infected urothelial cells
+            'V_u',     # Urinary viral load
         ]
     
     def ode_system(self, t: float, y: np.ndarray,
@@ -192,7 +259,8 @@ class BKPyVODESystem:
 
         Args:
             t: Current time (days)
-            y: State vector [V, T, G_v, C, I, D, CC, DNA, E, IFN, AK, D_tac, D_sir, P_rep, P_immune]
+            y: State vector [V, T, G_v, C, I, D, CC, DNA, E, IFN, AK, D_tac,
+               D_sir, P_rep, P_immune, T_naive, T_eff, C_u, I_u, V_u]
             dosing_context: Optional dict describing drug administration:
                 {'tacrolimus': {'start': float, 'stop': float|None, 'target': float},
                  'sirolimus': {...}}
@@ -206,8 +274,10 @@ class BKPyVODESystem:
         Returns:
             Derivatives dy/dt (all per day)
         """
-        # Unpack state variables
-        V, T, G_v, C, I, D, CC, DNA, E, IFN, AK, D_tac, D_sir, P_rep, P_immune = y
+        # Unpack state variables (kidney/intracellular block first, then the
+        # appended adaptive-T-cell and urothelial compartments)
+        V, T, G_v, C, I, D, CC, DNA, E, IFN, AK, D_tac, D_sir, P_rep, P_immune = y[:15]
+        T_naive, T_eff, C_u, I_u, V_u = y[15:20]
 
         p = self.params
 
@@ -228,6 +298,11 @@ class BKPyVODESystem:
         D_sir = max(0.0, D_sir)
         P_rep = max(0.0, P_rep)
         P_immune = max(0.0, P_immune)
+        T_naive = max(0.0, T_naive)
+        T_eff = max(0.0, T_eff)
+        C_u = max(0.0, C_u)
+        I_u = max(0.0, I_u)
+        V_u = max(0.0, V_u)
 
         # --- Drug administration -------------------------------------------
         # Continuous dosing: while within [start, stop) the intensity relaxes
@@ -302,14 +377,23 @@ class BKPyVODESystem:
         # infection loss, baseline turnover. A logistic C*(1-C) form collapses
         # permanently once C is depleted, which is why the previous model could
         # never sustain infection.
-        infection_rate = p['beta'] * V * C
+        # Kidney infection pressure includes a small bladder→kidney
+        # cross-feeding term (Funk 2008: urothelial amplification reseeds the
+        # graft) — kept deliberately small so it is a persistence mechanism,
+        # not a primary driver.
+        infection_rate = p['beta'] * (V + p['cross_feed'] * V_u) * C
         cell_death = p['d_cell'] * C
         dCdt = p['lambda_cell'] - infection_rate - cell_death
 
-        # dI/dt: infection gain minus cytopathic death and effector killing
-        # (effector killing is weakened by tacrolimus via tac_immune_effect)
+        # dI/dt: infection gain minus cytopathic death, nonspecific effector
+        # killing (weakened by tacrolimus via tac_immune_effect), and
+        # BKPyV-specific CTL killing by T_eff. The T-cell hit itself is NOT
+        # attenuated by tacrolimus — calcineurin blockade acts on priming and
+        # expansion (below), not on the cytolytic synapse.
         infected_gain = infection_rate
-        infected_death = p['d_infected'] * I + p['immune_kill'] * E * I * tac_immune_effect
+        infected_death = (p['d_infected'] * I
+                          + p['immune_kill'] * E * I * tac_immune_effect
+                          + p['tcell_kill'] * T_eff * I)
         dIdt = infected_gain - infected_death
 
         # dD/dt: dead/damaged cells accumulate and clear slowly
@@ -358,8 +442,42 @@ class BKPyVODESystem:
         # dP_immune/dt: interferon-driven, suppressed by tacrolimus
         dP_immunedt = p['p_immune_prod'] * IFN * tac_immune_effect - p['p_immune_decay'] * P_immune
 
+        # --- BKPyV-specific T-cell arm --------------------------------------
+        # Antigen drive: free virions plus infected-cell display. Tacrolimus
+        # blunts priming and clonal expansion (calcineurin/NFAT) with a
+        # saturating coefficient stronger than its innate-arm effect — this is
+        # the clinically dominant reason tacrolimus regimens carry the highest
+        # BKPyV risk (Demey 2018 meta-analysis; Kotton 2024 consensus).
+        antigen_drive = V + p['tcell_antigen_i_weight'] * I
+        tac_tcell_effect = 1.0 / (1.0 + p['tac_tcell_suppression'] * D_tac_eff)
+
+        # dT_naive/dt: slow replenishment, antigen-driven recruitment into the
+        # effector pool (consumes naive cells), baseline turnover.
+        tcell_priming = p['a_tcell'] * antigen_drive * T_naive * tac_tcell_effect
+        dT_naivedt = p['lambda_tcell'] - tcell_priming - p['d_tcell'] * T_naive
+
+        # dT_eff/dt: priming input plus antigen-dependent expansion with
+        # logistic ceiling, minus effector decay.
+        tcell_expansion = (p['prolif_tcell'] * antigen_drive * T_eff
+                           * (1.0 - T_eff / p['tcell_carry']) * tac_tcell_effect)
+        dT_effdt = tcell_priming + tcell_expansion - p['d_teff'] * T_eff
+
+        # --- Urinary/urothelial compartment (Funk 2008) ---------------------
+        # Urothelial infection pressure: local spread (beta_u * V_u) plus
+        # seeding by kidney-derived virions draining into the bladder.
+        uro_infection_rate = (p['beta_u'] * V_u + p['seed_kidney_u'] * V) * C_u
+        dC_udt = p['lambda_u'] - uro_infection_rate - p['d_cell_u'] * C_u
+        dI_udt = (uro_infection_rate
+                  - p['d_infected_u'] * I_u
+                  - p['immune_kill_u'] * E * I_u * tac_immune_effect)
+        # Urinary viral load = aggregate urothelial production + kidney
+        # drainage − urinary washout. Amplification here is what makes urine
+        # loads exceed plasma by orders of magnitude (>95% urothelial origin).
+        dV_udt = p['p_u'] * I_u + p['drain_kidney'] * V - p['delta_u'] * V_u
+
         return np.array([dVdt, dTdt, dG_vdt, dCdt, dIdt, dDdt, dCCdt, dDNAdt,
-                        dEdt, dIFNdt, dAKdt, dD_tacdt, dD_sirdt, dP_repdt, dP_immunedt])
+                        dEdt, dIFNdt, dAKdt, dD_tacdt, dD_sirdt, dP_repdt, dP_immunedt,
+                        dT_naivedt, dT_effdt, dC_udt, dI_udt, dV_udt])
     
     def get_initial_conditions(self, cell_count: float = 1.0) -> np.ndarray:
         """Get initial conditions for the ODE system.
@@ -385,7 +503,12 @@ class BKPyVODESystem:
             0.0,          # D_tac: No tacrolimus
             0.0,          # D_sir: No sirolimus
             0.7,          # P_rep: Baseline DNA replication pathway
-            0.5           # P_immune: Baseline immune pathway
+            0.5,          # P_immune: Baseline immune pathway
+            0.02,         # T_naive: small primed repertoire (seropositive recipient)
+            0.02,         # T_eff: low pre-existing virus-specific memory
+            1.0,          # C_u: full urothelial compartment
+            0.0,          # I_u: no urothelial infection
+            0.0,          # V_u: no urinary viral load
         ])
     
     def get_infection_conditions(self, viral_load: float = 0.5) -> np.ndarray:

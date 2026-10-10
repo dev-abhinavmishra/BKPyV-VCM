@@ -23,11 +23,13 @@ from vcm.simulators.ode_system import BKPyVODESystem
 class BKPyVODESimulator(BaseSimulator):
     """ODE-based BK polyomavirus simulator using scipy integration.
     
-    This simulator uses a system of 15 coupled ODEs to model:
+    This simulator uses a system of 20 coupled ODEs to model:
     - Viral dynamics (viral load, T antigen, viral gene expression)
     - Host cell states (healthy, infected, dead cells)
     - Cell cycle progression and DNA synthesis
     - Immune response (effector cells, interferon, antiviral state)
+    - BKPyV-specific adaptive T cells (naive → effector; calcineurin-sensitive)
+    - Urinary/urothelial compartment with kidney↔bladder cross-feeding (Funk 2008)
     - Drug pharmacodynamics (tacrolimus, sirolimus)
     - Pathway activities (DNA replication, innate immune)
     
@@ -450,8 +452,15 @@ class BKPyVODESimulator(BaseSimulator):
         Returns:
             CellState object
         """
-        # Unpack state vector
-        V, T, G_v, C, I, D, CC, DNA, E, IFN, AK, D_tac, D_sir, P_rep, P_immune = y
+        # Unpack state vector (15-dim intracellular block + appended
+        # T-cell and urothelial compartments; extras defensively defaulted
+        # for any legacy 15-vector caller)
+        V, T, G_v, C, I, D, CC, DNA, E, IFN, AK, D_tac, D_sir, P_rep, P_immune = y[:15]
+        T_naive = float(y[15]) if len(y) > 15 else 0.0
+        T_eff = float(y[16]) if len(y) > 16 else 0.0
+        C_u = float(y[17]) if len(y) > 17 else 1.0
+        I_u = float(y[18]) if len(y) > 18 else 0.0
+        V_u = float(y[19]) if len(y) > 19 else 0.0
         
         # Create new state based on template
         new_state = copy.deepcopy(template_state)
@@ -518,6 +527,13 @@ class BKPyVODESimulator(BaseSimulator):
         new_state.metadata["tacrolimus_effect"] = D_tac
         new_state.metadata["sirolimus_effect"] = D_sir
         new_state.metadata["nccr_variant"] = template_state.metadata.get("nccr_variant", "archetype")
+
+        # Adaptive T-cell arm and urinary compartment (Funk 2008)
+        new_state.metadata["bkpyv_tcell_naive"] = T_naive
+        new_state.metadata["bkpyv_tcell_effector"] = T_eff
+        new_state.metadata["urothelial_healthy_cells"] = C_u
+        new_state.metadata["urothelial_infected_cells"] = I_u
+        new_state.metadata["urine_viral_load"] = max(0.0, V_u)
         new_state.metadata["intracellular_replication_flux"] = float(max(0.0, V * (T / (T + 0.5))))
         new_state.metadata["viral_production_rate"] = float(max(0.0, P_rep * T))
         new_state.metadata["immune_control_index"] = float(max(0.0, min(1.0, P_immune)))

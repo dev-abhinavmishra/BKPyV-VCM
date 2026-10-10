@@ -33,7 +33,7 @@ class TestBKPyVODESystem:
         """Test that state vector names are correctly defined."""
         ode_system = BKPyVODESystem()
         names = ode_system.get_state_vector_names()
-        assert len(names) == 15
+        assert len(names) == 20
         assert 'V' in names  # Viral load
         assert 'T' in names  # T antigen
         assert 'C' in names  # Healthy cells
@@ -45,7 +45,7 @@ class TestBKPyVODESystem:
         """Test initial conditions generation."""
         ode_system = BKPyVODESystem()
         y0 = ode_system.get_initial_conditions()
-        assert len(y0) == 15
+        assert len(y0) == len(ode_system.get_state_vector_names())
         assert y0[0] == 0.0  # No initial virus
         assert y0[3] == 1.0  # One healthy cell
         assert y0[4] == 0.0  # No infected cells
@@ -64,7 +64,7 @@ class TestBKPyVODESystem:
         ode_system = BKPyVODESystem()
         y0 = ode_system.get_initial_conditions()
         dydt = ode_system.ode_system(0.0, y0)
-        assert len(dydt) == 15
+        assert len(dydt) == len(ode_system.get_state_vector_names())
         assert all(np.isfinite(dydt))
 
     def test_ode_function_with_infection(self):
@@ -72,7 +72,7 @@ class TestBKPyVODESystem:
         ode_system = BKPyVODESystem()
         y0 = ode_system.get_infection_conditions()
         dydt = ode_system.ode_system(0.0, y0)
-        assert len(dydt) == 15
+        assert len(dydt) == len(ode_system.get_state_vector_names())
         # Viral load should be changing (non-zero derivative)
         assert dydt[0] != 0.0 or dydt[1] != 0.0
 
@@ -82,7 +82,7 @@ class TestBKPyVODESystem:
         y0 = ode_system.get_infection_conditions()
         drug_events = {0.0: {'tacrolimus': 1.0}}
         dydt = ode_system.ode_system(0.0, y0, drug_events)
-        assert len(dydt) == 15
+        assert len(dydt) == len(ode_system.get_state_vector_names())
         # Drug concentrations should be changing
         assert dydt[11] < 0.0  # Tacrolimus clearance
 
@@ -97,7 +97,7 @@ class TestBKPyVODESystem:
         sol = solve_ivp(ode_func, (0, 100), y0, method='LSODA')
         assert sol.success
         assert np.all(np.isfinite(sol.y))
-        assert sol.y.shape[0] == 15  # 15 state variables
+        assert sol.y.shape[0] == len(ode_system.get_state_vector_names())
 
     def test_viral_clearance_kinetics(self):
         """Viral load must decay when production is switched off.
@@ -237,7 +237,7 @@ class TestBKPyVODESimulator:
         simulator = BKPyVODESimulator()
         y0 = simulator._cellstate_to_ode(initial_state)
 
-        assert len(y0) == 15
+        assert len(y0) == len(simulator.ode_system.get_state_vector_names())
         assert y0[0] == initial_state.metadata['viral_load']
         assert y0[1] == initial_state.genes['viral_LT'].expression_level
 
@@ -488,3 +488,112 @@ class TestODESystemValidation:
         for solver in solvers:
             sol = solve_ivp(ode_func, (0, 20), y0, method=solver)
             assert sol.success, f"Solver {solver} failed"
+
+
+class TestExtendedCompartments:
+    """Tests for the appended adaptive-T-cell and urothelial compartments.
+
+    Indices 15-19: T_naive, T_eff, C_u, I_u, V_u.
+    """
+
+    def test_urine_amplifies_above_plasma(self):
+        """Urothelial amplification makes urinary load exceed plasma load by
+        orders of magnitude under sustained viremia (Funk 2008: urine ~3000x
+        plasma; we assert a conservative >50x on normalised units)."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y),
+            (0, 120), y0, t_eval=np.arange(0, 121, 1.0), method='LSODA',
+        )
+        assert sol.success
+        v_plasma, v_urine = sol.y[0], sol.y[19]
+        assert v_urine[-1] > 0.0
+        assert v_urine[-1] > v_plasma[-1] * 50.0
+
+    def test_urine_origin_is_urothelial(self):
+        """The urothelial production term must dominate the urine load
+        (Funk 2008: >95% of the urine load is urothelial-derived, not
+        kidney drainage)."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y),
+            (0, 120), y0, t_eval=np.arange(0, 121, 1.0), method='LSODA',
+        )
+        v_plasma, i_u = sol.y[0, -1], sol.y[18, -1]
+        p = ode_system.params
+        urothelial = p['p_u'] * i_u
+        drainage = p['drain_kidney'] * v_plasma
+        assert urothelial / (urothelial + drainage) > 0.9
+
+    def test_tcell_arm_expands_under_antigen(self):
+        """BKPyV-specific effector T cells must expand when antigen is
+        present (baseline repertoire is 0.02)."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y),
+            (0, 120), y0, t_eval=np.arange(0, 121, 1.0), method='LSODA',
+        )
+        t_eff = sol.y[16]
+        assert t_eff.max() > 0.1
+
+    def test_tacrolimus_blunts_tcell_expansion(self):
+        """Tacrolimus must suppress T_eff expansion (calcineurin/NFAT
+        blockade) — the clinically dominant mechanism for BKPyV risk under
+        tacrolimus (Kotton 2024)."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=0.5)
+        no_drug = solve_ivp(
+            lambda t, y: ode_system.ode_system(t, y),
+            (0, 60), y0, t_eval=np.arange(0, 61, 1.0), method='LSODA',
+        )
+        with_tac = solve_ivp(
+            lambda t, y: ode_system.ode_system(
+                t, y, dosing_context={
+                    "tacrolimus": {"start": 0.0, "stop": None, "target": 1.0}}),
+            (0, 60), y0, t_eval=np.arange(0, 61, 1.0), method='LSODA',
+        )
+        assert with_tac.y[16].max() < no_drug.y[16].max() * 0.5
+
+    def test_plasma_clears_while_viruria_persists(self):
+        """Funk 2008 signature: strong curtailment clears plasma viremia
+        while the urothelial reservoir keeps shedding (viruria outlives
+        viremia — urine PCR stays positive after plasma clears)."""
+        ode_system = BKPyVODESystem()
+        y0 = ode_system.get_infection_conditions(viral_load=3.0)
+        sol = solve_ivp(
+            lambda t, y: ode_system.ode_system(
+                t, y, {"tacrolimus": {"start": 0.0, "stop": None, "target": 1.0}}),
+            (0, 60), y0, t_eval=np.linspace(0, 60, 601), method='LSODA',
+        )
+        y_peak = sol.y[:, int(np.argmax(sol.y[0]))]
+
+        curtailed = BKPyVODESystem({"p": 8.0 * 0.1, "p_u": 500.0 * 0.1})
+        sol2 = solve_ivp(
+            lambda t, y: curtailed.ode_system(t, y),
+            (0, 140), y_peak, t_eval=np.linspace(0, 140, 561), method='LSODA',
+        )
+        assert sol2.y[0, -1] < 0.05      # plasma viremia cleared
+        assert sol2.y[19, -1] > 1.0      # urinary shedding persists
+
+    def test_metadata_exposes_new_compartments(self):
+        """CellState metadata must carry the new compartment readouts."""
+        plugin = BKPolyomavirusPlugin()
+        initial_state = plugin.create_initial_state()
+        infection = Perturbation(
+            id="bkpyv_infection", name="BKPyV infection",
+            perturbation_type=PerturbationType.VIRAL_INFECTION,
+            magnitude=1.0, timing=5.0,
+        )
+        simulator = BKPyVODESimulator()
+        result = simulator.simulate(
+            initial_state=initial_state, perturbations=[infection],
+            n_steps=20, timestep=1.0,
+        )
+        md = result.final_state.metadata
+        for key in ("urine_viral_load", "bkpyv_tcell_effector",
+                    "bkpyv_tcell_naive", "urothelial_infected_cells"):
+            assert key in md

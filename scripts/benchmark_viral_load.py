@@ -267,7 +267,12 @@ def run_curtailment_experiment(mapper, y_peak):
     results = {}
     for cut in (0.50, 0.80, 0.90):
         t_eval = np.linspace(0, 140, 561)
-        sol = simulate(y_peak, t_eval, params={"p": 8.0 * (1.0 - cut)})
+        # Curtailment models a systemic immunosuppression reduction, so it
+        # scales replication in BOTH compartments (kidney production p and
+        # urothelial production p_u) — matching Funk 2008, whose efficacy
+        # parameter applies to every replication site, not just the graft.
+        sol = simulate(y_peak, t_eval,
+                       params={"p": 8.0 * (1.0 - cut), "p_u": 500.0 * (1.0 - cut)})
         cp = copies_trajectory(mapper, sol.y[0])
         t_clear_wk = time_below(t_eval, cp, CLEAR_THRESHOLD_CP_ML) / 7.0
         # sustained clearance: reaches threshold and stays under it to the end
