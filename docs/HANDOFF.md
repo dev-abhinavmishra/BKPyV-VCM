@@ -134,9 +134,16 @@ streamlit run src/vcm/ui/streamlit_app.py        # 12 pages
 - Real-data validation LANDED: validation_data/funk2008/ (6 digitized
   Funk-2008 plasma series, CC BY-NC-ND, provenance in that README) +
   scripts/fit_patient_series.py. Cohort holdout MAE 0.82 vs 1.36 log10
-  baseline; 4/6 win-or-tie. Documented limits: model plasma cap ~6
-  log10 (Pat 06119 ~7.7 unreachable), rebound timing unlearnable from
-  pre-rebound data (27447), refractory 00885.
+  baseline; 5/6 win-or-tie (only refractory 00885 ties). Refit after a
+  49x timeline audit-fix IMPROVED results; fitted params now real
+  clinical units (IS-reduction wk 11-89, pre-roll 20-400d). Documented
+  limits: model plasma cap ~6 log10 (Pat 06119 ~7.7 unreachable),
+  refractory 00885. Audit note: loaders return RAW units; convert at
+  the sim boundary only — self-consistent x7 bugs hide in metrics but
+  show in axes.
+- Competition packaging LANDED: docs/PAPER_DRAFT.md (full paper),
+  ISEF_ABSTRACT.md (218w), PRESENTATION_POINTS.md (judge Q&A),
+  outputs/figures/{composite_figure,patient_fits}.png.
 - RESEARCH QUEUE for next session: agnoprotein latency compartment
   (Lat state feeding reactivation_onset mechanistically — replaces
   the phenomenological hazard), Bayesian fit of the virtual cohort
