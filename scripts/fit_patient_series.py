@@ -160,6 +160,51 @@ def main():
     print("-" * 92)
     print(f"cohort mean holdout MAE {mae_all:.3f} log10 vs baseline "
           f"{base_all:.3f} log10")
+    _plot_fits(results)
+
+
+def _plot_fits(results):
+    """6-panel figure: observed points + full-fit curve; holdout split
+    marked. Saved to outputs/figures/patient_fits.png."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("matplotlib unavailable — skipping patient_fits figure")
+        return
+    fig, axes = plt.subplots(2, 3, figsize=(13, 7), sharey=True)
+    for ax, (csv, (name, (full, ho))) in zip(
+            axes.ravel(),
+            sorted(zip(sorted(DATA_DIR.glob("pat_*.csv")),
+                       results.items()))):
+        wk, y = load_series(csv)
+        theta = full["theta"]
+        grid_wk = np.linspace(0, wk[-1] + 4, 300)
+        pred = simulate_patient(theta, grid_wk * 7.0)
+        ax.plot(grid_wk, pred, lw=1.5, label="model fit")
+        ntr = ho["n_train"]
+        ax.plot(wk[:ntr], y[:ntr], "o", ms=4, label="observed (train)")
+        ax.plot(wk[ntr:], y[ntr:], "s", ms=4, mfc="none",
+                label="observed (holdout)")
+        ax.axvspan(wk[ntr - 1], wk[-1] + 4, alpha=0.08)
+        ax.set_title(f"Pat {name}  R2={full['r2']:.2f}  "
+                     f"holdout {ho['mae']:.2f} vs {ho['baseline_mae']:.2f}",
+                     fontsize=9)
+        ax.set_ylim(0, 11)
+    for ax in axes[-1]:
+        ax.set_xlabel("weeks post-transplant")
+    for ax in axes[:, 0]:
+        ax.set_ylabel("log10 cp/mL")
+    axes[0, 0].legend(fontsize=7, loc="upper right")
+    fig.suptitle("ODE fits to digitized patient plasma series "
+                 "(Funk 2008); shaded = holdout region", fontsize=11)
+    fig.tight_layout()
+    out = (Path(__file__).resolve().parent.parent
+           / "outputs" / "figures" / "patient_fits.png")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=170)
+    print(f"figure -> {out}")
 
 
 if __name__ == "__main__":
