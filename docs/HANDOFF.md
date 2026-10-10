@@ -76,3 +76,18 @@ streamlit run src/vcm/ui/streamlit_app.py        # 11 pages
    honest upgrade if a judge asks.
 5. Abstract/poster updates: the tac→sir conversion result is the
    headline; the identifiability table is the rigor signal.
+
+## Arc 2 additions (commit c8cc551)
+
+- **22-dim**: F_rr_u (index 21) — urinary quasi-species pool, weakened
+  selection (uro_rr_advantage=0.15, shedding- not S-phase-coupled) +
+  kidney-drainage mixing. Gosert plasma>urine rr enrichment EMERGES ~3x.
+- **`scripts/screening_policy_analysis.py`**: trigger-level policy sim —
+  1k clears wk2.7 with F_k=0.019; never → F_k=0.93. Mechanistic case for
+  intensive screening.
+- Prediction to flag in the paper: under conversion the urinary pool
+  becomes rr-dominated while kidney stays archetype (unmeasured
+  clinically — hypothesis, not claim).
+- Traps now encoded in tests/skill: normalized_to_copies is SCALAR-only;
+  est_ngml only under trough_ng_ml; urine metrics = model-internal ratio.
+- 211 tests; benchmark 6 signature checks PASS.
