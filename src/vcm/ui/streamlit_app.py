@@ -906,7 +906,7 @@ def st_regimen_design_page():
     st.markdown("## 💉 Regimen Design — mechanistic protocol explorer")
     st.caption(
         "Hypothesis generator, not patient advice: every schedule is simulated "
-        "on the 21-dim mechanistic ODE with real drug half-lives "
+        "on the 23-dim mechanistic ODE with real drug half-lives "
         "(tac t½≈12 h, sir t½≈60 h) and real trough units."
     )
 
