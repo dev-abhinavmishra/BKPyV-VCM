@@ -132,9 +132,11 @@ def main():
         m["label"] = label
         results.append(m)
         clear = "never" if m["clearance_weeks"] is None else f"{m['clearance_weeks']:.1f}"
+        # plasma -> ~0 under clearing schedules makes u:p diverge; cap display
+        up = ">1e4" if m["urine_plasma_ratio"] > 1e4 else f"{m['urine_plasma_ratio']:.0f}"
         print(f"{label:<42} {clear:>9} {m['final_log10_cpml']:>11} "
               f"{m['peak_teff']:>9} {m['rebound_index']:>8} {m['final_frr']:>6} "
-              f"{m['urine_plasma_ratio']:>6}")
+              f"{up:>6}")
 
     # Pareto view: schedules that clear, ranked by lowest rebound first
     clearing = [r for r in results if r["clearance_weeks"] is not None]

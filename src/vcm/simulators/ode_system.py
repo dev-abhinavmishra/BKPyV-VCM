@@ -146,6 +146,11 @@ class BKPyVODESystem:
             # early-gene overexpression advantage buys little — this is
             # what makes rr enrichment plasma-specific (Gosert 2008).
             'uro_rr_advantage': 0.15,      # Urothelial selection relative to kidney
+            # Capsid underexpression does not translate 1:1 into shed-virion
+            # deficit: fewer capsid proteins per particle mainly reduce
+            # infectivity/packaging completeness, not particle count.
+            # Coupling <1 is the honest mapping (still the rr fitness cost).
+            'rr_capsid_virion_cost': 0.4,  # fraction of capsid deficit hitting yield
 
             # Viral gene expression
             'g_prod': 0.15,        # Viral gene production rate (1/day)
@@ -441,7 +446,18 @@ class BKPyVODESystem:
         # --- Viral dynamics -------------------------------------------------
         # dV/dt: production from infected cells, gated by T antigen supply and
         # sirolimus; clearance is increased (saturating) by the antiviral state.
-        viral_production = p['p'] * I * (T / (T + p['half_saturation'])) * sir_effect
+        # The rearranged pool's capsid suppression is its fitness COST:
+        # rr-NCCR virions package fewer capsids, so free-virion output falls
+        # to rr_capsid_fraction of baseline at F_rr=1 (Gosert 2008) — the
+        # trade-off that keeps archetype in the urinary reservoir.
+        nccr_early_eff, nccr_capsid_eff = self._nccr_multipliers(F_rr)
+        # Capsid cost enters partially (expression deficit -> yield deficit
+        # is <1:1); see rr_capsid_virion_cost.
+        virion_cost = 1.0 - (1.0 - nccr_capsid_eff) * p['rr_capsid_virion_cost']
+        viral_production = (
+            p['p'] * I * (T / (T + p['half_saturation']))
+            * sir_effect * virion_cost
+        )
         ak_boost = p['ak_max_enhancement'] * AK / (AK + p['ak_half'])
         viral_clearance = p['delta'] * V * (1.0 + ak_boost)
         dVdt = viral_production - viral_clearance
@@ -461,7 +477,6 @@ class BKPyVODESystem:
         # fraction grows, early-gene expression approaches rr_early_gain x
         # the archetype baseline (Gosert 2008: rr-NCCR overexpresses early
         # genes).
-        nccr_early_eff, nccr_capsid_eff = self._nccr_multipliers(F_rr)
         g_production = (
             p['g_prod'] * V * p['translation_enhancement']
             * nccr_early_eff / (1.0 + G_v)

@@ -10,7 +10,7 @@ commits ahead of main, PR pending).
    `tac_tcell_suppression=12` — calcineurin hits priming/proliferation,
    NOT the kill itself) and a population-level urothelial compartment
    (C_u/I_u/V_u) cross-feeding the kidney. Reproduces the Funk 2008
-   signature: urine:plasma ~384×, plasma clears under 90% curtailment
+   signature: urine:plasma ~445×, plasma clears under 90% curtailment
    while viruria persists.
 2. **Real PK dosing** (`800ad67`): `trough_ng_ml` schedule windows with
    actual half-lives (tac 12h, sir 60h) and reference troughs (tac 8,
