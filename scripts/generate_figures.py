@@ -61,7 +61,7 @@ def main():
     for thr, c in ((1e3, "tab:green"), (1e4, "tab:orange")):
         ax[0, 0].axhline(np.log10(thr), color=c, ls=":", lw=1,
                          label=f"{int(thr):,} cp/mL")
-    ax[0, 0].set(ylabel="log10 load", xlabel="weeks",
+    ax[0, 0].set(ylabel="log10 load", xlabel="weeks", ylim=(-0.5, 5.2),
                  title="A. Two-compartment kinetics vs clinical thresholds")
     ax[0, 0].legend(fontsize=8)
 
@@ -83,7 +83,7 @@ def main():
         ax[1, 0].plot(wk(t2), np.log10(_cp(y2[0])), lw=2, color=col, label=lab)
     ax[1, 0].axhline(3, color="tab:green", ls=":", lw=1)
     ax[1, 0].set(ylabel="log10 cp/mL", xlabel="weeks",
-                 title="C. Regimen design: taper never clears, conversion clears")
+                 title="C. Regimen design: taper plateaus; conversion clears")
     ax[1, 0].legend(fontsize=8)
 
     # D) onset distributions (hazard model identical to
