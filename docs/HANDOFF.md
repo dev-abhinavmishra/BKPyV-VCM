@@ -39,6 +39,14 @@ because `streamlit` isn't in the venv — install it to run that file.
 `const SCENES`, `eval(src + test)` — keep test code inside the same
 eval (class bindings don't leak).
 
+**Transitions (b332c16):** `#stage` fullscreen canvas drives slide
+changes — dive into the trace head (zoom+tilt+reflection), then
+point-wise morph into the next slide's hero path. Scenes expose
+`paths()` (viewport coords) and accept `pre` (model pts) so landed
+charts continue seamlessly. `buildTarget(id)` computes morph targets
+(fresh sims; s2/s7/s8 warmed via `warm()` on idle); hairlines stand in
+for text slides. Nav queues via `pending`; RM instant-swaps.
+
 ## Earlier arc (2026-10-09, finish-vcm branch)
 
 1. **21-dimensional ODE** (`11b3161`): added BKPyV-specific T-cell arm
