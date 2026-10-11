@@ -67,6 +67,9 @@
     stroke-dasharray:1400;stroke-dashoffset:1400;
     transition:stroke-dashoffset 2.4s cubic-bezier(.5,0,.15,1);transition-delay:var(--d,.2s)}
   .slide.active .draw{stroke-dashoffset:0}
+  .pulse{animation:none}
+  .slide.active .pulse{animation:pulse 2.6s ease-in-out 2.4s infinite}
+  @keyframes pulse{0%,100%{opacity:.75}50%{opacity:.25}}
   .dot{opacity:0;transition:opacity .5s ease;transition-delay:calc(var(--d,0s) + 2.1s)}
   .slide.active .dot{opacity:1}
   .bar{transform:scaleY(0);transform-origin:bottom;transition:transform .8s cubic-bezier(.3,0,.2,1);transition-delay:var(--d,0s)}
@@ -211,39 +214,53 @@
     <div class="rv" style="--d:.1s"><div class="eyebrow">Architecture — 23 state variables, five layers</div></div>
     <div class="cols">
       <div class="col" style="flex:1.35">
-        <svg viewBox="0 0 560 400" class="rv" style="--d:.3s">
+        <svg viewBox="0 0 560 400">
+          <defs>
+            <marker id="ah" markerWidth="7" markerHeight="7" refX="5.5" refY="3.5" orient="auto">
+              <path d="M0,0 L7,3.5 L0,7 z" fill="var(--ink2)"/>
+            </marker>
+          </defs>
           <!-- graft box -->
-          <rect x="20" y="30" width="240" height="150" rx="4" fill="rgba(14,93,86,.06)" stroke="var(--teal)" stroke-width="1.4"/>
-          <text x="34" y="52" class="axlab" fill="var(--teal)">GRAFT (kidney)</text>
-          <circle cx="75" cy="105" r="26" fill="none" stroke="var(--ink2)" stroke-width="1.4"/>
-          <text x="62" y="110" class="axlab">C — healthy</text>
-          <circle cx="185" cy="105" r="26" fill="rgba(164,68,42,.12)" stroke="var(--rust)" stroke-width="1.4"/>
-          <text x="172" y="110" class="axlab">I — infected</text>
-          <path d="M101,105 H156" stroke="var(--ink2)" stroke-width="1.2" fill="none" marker-end="url(#ah)"/>
-          <circle cx="130" cy="152" r="16" fill="none" stroke="var(--faint)" stroke-width="1.2" stroke-dasharray="3 3"/>
-          <text x="112" y="156" class="axlab">L — latent</text>
-          <circle cx="212" cy="155" r="13" fill="none" stroke="var(--teal2)" stroke-width="1.4"/>
-          <text x="196" y="159" class="axlab">V — virus</text>
+          <g class="rv" style="--d:.3s">
+            <rect x="20" y="30" width="240" height="150" rx="4" fill="rgba(14,93,86,.06)" stroke="var(--teal)" stroke-width="1.4"/>
+            <text x="34" y="52" class="axlab" fill="var(--teal)">GRAFT (kidney)</text>
+            <circle cx="75" cy="105" r="26" fill="none" stroke="var(--ink2)" stroke-width="1.4"/>
+            <text x="62" y="110" class="axlab">C — healthy</text>
+            <circle cx="185" cy="105" r="26" fill="rgba(164,68,42,.12)" stroke="var(--rust)" stroke-width="1.4"/>
+            <text x="172" y="110" class="axlab">I — infected</text>
+            <circle cx="130" cy="152" r="16" fill="none" stroke="var(--faint)" stroke-width="1.2" stroke-dasharray="3 3"/>
+            <text x="112" y="156" class="axlab">L — latent</text>
+            <circle cx="212" cy="155" r="13" fill="none" stroke="var(--teal2)" stroke-width="1.4"/>
+            <text x="196" y="159" class="axlab">V — virus</text>
+          </g>
+          <path class="draw" style="--d:.7s" d="M101,105 H156" stroke="var(--ink2)" stroke-width="1.4" marker-end="url(#ah)"/>
           <!-- urinary box -->
-          <rect x="310" y="30" width="230" height="120" rx="4" fill="rgba(14,93,86,.03)" stroke="var(--faint)" stroke-width="1.2" stroke-dasharray="6 4"/>
-          <text x="324" y="52" class="axlab">URINARY (Funk topology)</text>
-          <text x="340" y="105" class="axlab">Cᵤ → Iᵤ → Vᵤ  ·  drained + cross-feed</text>
-          <path d="M260,80 H306" stroke="var(--ink2)" stroke-width="1.2" fill="none"/>
+          <g class="rv" style="--d:.55s">
+            <rect x="310" y="30" width="230" height="120" rx="4" fill="rgba(14,93,86,.03)" stroke="var(--faint)" stroke-width="1.2" stroke-dasharray="6 4"/>
+            <text x="324" y="52" class="axlab">URINARY (Funk topology)</text>
+            <text x="340" y="105" class="axlab">Cᵤ → Iᵤ → Vᵤ  ·  drained + cross-feed</text>
+          </g>
+          <path class="draw" style="--d:.85s" d="M260,80 H306" stroke="var(--ink2)" stroke-width="1.4" marker-end="url(#ah)"/>
           <!-- intracellular -->
-          <rect x="20" y="215" width="240" height="110" rx="4" fill="rgba(14,93,86,.06)" stroke="var(--teal)" stroke-width="1.4"/>
-          <text x="34" y="237" class="axlab" fill="var(--teal)">INSIDE THE INFECTED CELL</text>
-          <text x="34" y="268" class="axlab">S-phase gate ⟶ T-antigen</text>
-          <text x="34" y="292" class="axlab">DNA synthesis ⟶ capsid</text>
-          <text x="34" y="314" class="axlab" fill="var(--rust)">TAg never drives cell cycle ✓</text>
-          <path d="M135,180 V211" stroke="var(--ink2)" stroke-width="1.2" fill="none"/>
+          <g class="rv" style="--d:.8s">
+            <rect x="20" y="215" width="240" height="110" rx="4" fill="rgba(14,93,86,.06)" stroke="var(--teal)" stroke-width="1.4"/>
+            <text x="34" y="237" class="axlab" fill="var(--teal)">INSIDE THE INFECTED CELL</text>
+            <text x="34" y="268" class="axlab">S-phase gate ⟶ T-antigen</text>
+            <text x="34" y="292" class="axlab">DNA synthesis ⟶ capsid</text>
+            <text x="34" y="314" class="axlab" fill="var(--rust)">TAg never drives cell cycle ✓</text>
+          </g>
+          <path class="draw" style="--d:1s" d="M135,180 V211" stroke="var(--ink2)" stroke-width="1.4" marker-end="url(#ah)"/>
           <!-- immune + drugs -->
-          <rect x="310" y="185" width="230" height="80" rx="4" fill="rgba(164,68,42,.05)" stroke="var(--rust)" stroke-width="1.2"/>
-          <text x="324" y="207" class="axlab" fill="var(--rust)">IMMUNE + DRUGS</text>
-          <text x="324" y="232" class="axlab">T cells — primed, capped, tac-gated</text>
-          <text x="324" y="254" class="axlab">tac ng/mL ⟶ control of production</text>
-          <rect x="310" y="290" width="230" height="50" rx="4" fill="rgba(14,93,86,.03)" stroke="var(--faint)" stroke-width="1.2" stroke-dasharray="6 4"/>
-          <text x="324" y="310" class="axlab">QUASI-SPECIES</text>
-          <text x="324" y="330" class="axlab">archetype ⟶ rearranged NCCR (2 pools)</text>
+          <g class="rv" style="--d:1.05s">
+            <rect x="310" y="185" width="230" height="80" rx="4" fill="rgba(164,68,42,.05)" stroke="var(--rust)" stroke-width="1.2"/>
+            <text x="324" y="207" class="axlab" fill="var(--rust)">IMMUNE + DRUGS</text>
+            <text x="324" y="232" class="axlab">T cells — primed, capped, tac-gated</text>
+            <text x="324" y="254" class="axlab">tac ng/mL ⟶ control of production</text>
+            <rect x="310" y="290" width="230" height="50" rx="4" fill="rgba(14,93,86,.03)" stroke="var(--faint)" stroke-width="1.2" stroke-dasharray="6 4"/>
+            <text x="324" y="310" class="axlab">QUASI-SPECIES</text>
+            <text x="324" y="330" class="axlab">archetype ⟶ rearranged NCCR (2 pools)</text>
+          </g>
+          <path class="draw" style="--d:1.25s" d="M310,225 C280,225 265,200 262,150" stroke="var(--rust)" stroke-width="1.3" marker-end="url(#ah)"/>
         </svg>
       </div>
       <div class="col">
@@ -289,7 +306,7 @@
       <div class="col" style="flex:1.4">
         <svg viewBox="0 0 520 300" class="rv" style="--d:.4s">
           <line x1="46" y1="10" x2="46" y2="250" class="ax"/><line x1="46" y1="250" x2="510" y2="250" class="ax"/>
-          <line x1="46" y1="120" x2="510" y2="120" class="thl"/>
+          <line x1="46" y1="120" x2="510" y2="120" class="thl pulse"/>
           <text x="12" y="125" class="axlab" fill="var(--rust)">10⁴</text>
           <text x="52" y="265" class="axlab">0</text><text x="250" y="265" class="axlab">12 wk</text><text x="470" y="265" class="axlab">26</text>
           <!-- taper: rises, dips, plateaus above threshold -->
@@ -391,8 +408,8 @@
             <rect class="bar" style="--d:1.5s" x="370" y="200" width="22" height="30"/>
             <rect class="bar" style="--d:1.55s" x="392" y="215" width="22" height="15"/>
           </g>
-          <text x="130" y="105" class="axlab" fill="var(--rust)">tac 12 → ~4 wk</text>
-          <text x="212" y="105" class="axlab" fill="var(--teal)">tac 8 → ~6.3 wk</text>
+          <text x="112" y="100" class="axlab" fill="var(--rust)">tac 12 → ~4 wk</text>
+          <text x="225" y="100" class="axlab" fill="var(--teal)">tac 8 → ~6.3 wk</text>
           <text x="326" y="150" class="axlab">tac 5 → ~10 wk</text>
         </svg>
       </div>

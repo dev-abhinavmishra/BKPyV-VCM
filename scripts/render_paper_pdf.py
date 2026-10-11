@@ -123,7 +123,13 @@ class Paper(FPDF):
 
 
 def render_table(pdf: Paper, rows: list[list[str]]) -> None:
-    widths = [22, 26, 24, 32, 30, 32]
+    n = len(rows[0])
+    if n == 6:
+        widths = [22, 26, 24, 32, 30, 32]
+    elif n == 5:
+        widths = [30, 40, 34, 36, 26]
+    else:
+        widths = [166 / n] * n
     pdf.set_font("serif", "B", 9)
     pdf.set_fill_color(238, 234, 224)
     pdf.set_draw_color(150, 145, 130)
@@ -218,7 +224,7 @@ def main() -> None:
             continue
 
         fig_m = re.search(r"`outputs/figures/([\w.]+)`", stripped)
-        if fig_m and fig_counter < 2:
+        if fig_m and fig_counter < 4:
             fig_counter += 1
             png = FIGDIR / fig_m.group(1)
             cap = md(stripped[2:] if stripped.startswith("- ") else stripped)

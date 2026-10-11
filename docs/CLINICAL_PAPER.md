@@ -31,7 +31,7 @@ Three questions dominate clinical practice and lack quantitative answers:
 2. **Clearance** — once immunosuppression is reduced, when will the virus clear?
 3. **Policy** — which immunosuppression change (dose taper vs agent conversion) clears fastest at least rejection risk?
 
-Mechanistic viral-kinetic models are the natural tool for such questions. Funk et al. built the field's foundational BKPyV models — a six-compartment plasma model validated against prospectively monitored patients [5,6] — and Gosert et al. described the emergence of rearranged non-coding control region (rr-NCCR) variants during replication [7]. These models reproduce *population-level* kinetics; per-patient parameter fitting (Funk; Myers) and a prior feedback-control formulation of optimal immunosuppression (2018) each exist, but no published model couples host-cell permissiveness, compartment-specific NCCR selection, persistence, and forecasting/intervention machinery. The claim here is the *integration*, not any single component. Single-cell work has since established that host S-phase entry gates large T-antigen expression in primary renal proximal tubular cells [8], supplying a mechanistic trigger prior models lacked.
+Mechanistic viral-kinetic models are the natural tool for such questions. Funk et al. built the field's foundational BKPyV models — a six-compartment plasma model validated against prospectively monitored patients [5,6] — and Gosert et al. described the emergence of rearranged non-coding control region (rr-NCCR) variants during replication [7]. These models reproduce *population-level* kinetics; per-patient parameter fitting (Funk; Myers) and a prior feedback-control formulation of optimal immunosuppression [14] each exist, but no published model couples host-cell permissiveness, compartment-specific NCCR selection, persistence, and forecasting/intervention machinery. The claim here is the *integration*, not any single component. Single-cell work has since established that host S-phase entry gates large T-antigen expression in primary renal proximal tubular cells [8], supplying a mechanistic trigger prior models lacked.
 
 We therefore built a 23-compartment mechanistic virtual cell designed from the start to emit *falsifiable, individual-level predictions*, and then tested it against real patient trajectories — reporting failures alongside wins.
 
@@ -50,6 +50,8 @@ The core is a 23-dimensional ordinary-differential-equation system (`src/vcm/sim
 
 Copies/mL readouts use an explicitly assumption-labelled anchor bridge (`viral_load_mapper.py`; 10³ screening / 10⁴ presumptive-PVAN thresholds). The system is pinned by 219 tests (8 skipped for optional dependencies).
 
+- **Figure 1** (`outputs/figures/model_schematic.png`): the five coupled layers — graft, urinary, intracellular program, immune + drug arms, and the NCCR quasi-species — with the flows that connect them.
+
 ### 2.2 Prediction machinery
 
 - **Stochastic reactivation onset** (`reactivation_onset.py`): per-cell Poisson reactivation hazard scaled by tacrolimus trough → Monte-Carlo onset-time distribution (150 virtual patients per trough).
@@ -67,11 +69,22 @@ Copies/mL readouts use an explicitly assumption-labelled anchor bridge (`viral_l
 
 No public longitudinal qPCR dataset is *freely* downloadable without application — Myers et al. obtained CTOT-19 via ImmPort — so six patient plasma trajectories were digitized from Funk et al. 2008 Fig 3 [6] (CC BY-NC-ND; pixel-calibrated against the figure's own log₁₀ 4/7 reference lines; precision ≈ ±0.15 log₁₀, ±0.5 wk; provenance in `validation_data/funk2008/README.md`).
 
+### 2.5 Position within prior work
+
+| Model | Scope | Per-patient fit | Derived policy | This project's relation |
+|-------|-------|-----------------|----------------|-------------------------|
+| Funk 2006/2008 [5,6] | plasma + urinary kinetics | yes — prospective cohort | no | signatures validated against |
+| Myers 2025 [10] | 6-state patient-scale ODE | yes — Duke/CTOT data | discusses earlier Kalman/feedback formulations | acknowledged closest prior art |
+| Optimal-control IS (2018) [14] | renal-transplant immunosuppression | no patient data in demo | yes — feedback control | proves a policy claim can't be "first-ever"; ours is derived *on the cell-mechanism layer* |
+| **VCM (this work)** | 23-compartment, 5 coupled layers | 6 digitized series, honest holdout | yes — continuous control + sensitivity queued | integration: permissiveness × NCCR selection × persistence × forecasting |
+
 ## 3. Results
 
 ### 3.1 Published signatures reproduce without fitting
 
 All six benchmark checks pass: clearance half-life 6.6 d (within Funk's 0.25–17 d lytic regime [5,6]); curtailment profile (50% ineffective, ≥80% ≤7 wk, ≥90% ≤3 wk [6]); urine:plasma load ~450× (same order-of-magnitude direction as Funk's aggregate ~3000×; residual gap documented); rr-NCCR plasma>urine enrichment 2.6–2.7× (Gosert direction [7]); screening-threshold ordering (Hirsch [3]).
+
+- **Figure 2** (`outputs/figures/composite_figure.png`): four-panel results — (A) two-compartment kinetics vs clinical thresholds; (B) rr-NCCR emergence, plasma > urine; (C) taper plateaus vs conversion clears; (D) reactivation-onset distributions by tacrolimus trough.
 
 ### 3.2 Eight emergent predictions
 
@@ -101,6 +114,8 @@ All six benchmark checks pass: clearance half-life 6.6 d (within Funk's 0.25–1
 | **Cohort** | —      | —       | **0.82**    | **1.36**     | **4 clear wins, 1 marginal, 1 tie** |
 
 **Evidence tiers.** Tests/validators establish software correctness under the tested cases; the synthetic-cohort forecast establishes inference performance under the assumed generator and noise model; the six digitized trajectories are *preliminary retrospective* performance (the holdout informed development); independent longitudinal series — e.g. the offered Thompson cohort — are the pending external test. All five fitted parameters and the per-patient baseline are estimated on the training portion only; held-out points were never refit.
+
+- **Figure 3** (`outputs/figures/patient_fits.png`): six-panel model fits vs digitized patient series; shaded region = held-out data never seen by the fit.
 
 Documented failure modes (reported, not tuned away): Pat 06119's ~10⁷·⁷ plasma peak exceeds the model's current ~10⁶ dynamic ceiling, so its full-series R² is negative even though its holdout beats baseline 4.7×; Pat 00885's refractory fluctuation has no monotone equivalent — the model declines to overfit it. Two failure modes are *mechanism pointers*: the transient surges the fitted curves cannot reach (00107's bump, 06119's spike, 27447's rebound) are exactly what the latent-reservoir and stochastic-reactivation arms generate as discrete events — naming the next experiment (fit with release events enabled; obtain urine + PBMC series to constrain L).
 
@@ -139,8 +154,7 @@ A mechanistic virtual cell can move BKPyV management from reactive to predictive
 
 ## Figures
 
-- **Figure 1** (`outputs/figures/composite_figure.png`): four-panel composite — (A) two-compartment kinetics vs clinical thresholds; (B) rr-NCCR emergence, plasma > urine; (C) taper plateaus vs conversion clears; (D) reactivation-onset distributions by tacrolimus trough.
-- **Figure 2** (`outputs/figures/patient_fits.png`): six-panel model fits vs digitized patient series; shaded region = held-out data never seen by the fit.
+Figures are placed where they are cited: Figure 1 in §2.1 (model schematic), Figure 2 in §3.1 (four-panel results composite), Figure 3 in §3.3 (six-panel patient fits).
 
 ---
 
