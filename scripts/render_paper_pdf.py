@@ -72,7 +72,7 @@ class Paper(FPDF):
             return
         self.set_font("serif", "I", 8)
         self.set_text_color(110, 105, 96)
-        self.cell(0, 4, "BKPyV-VCM  ·  Clinical paper  ·  v2.0", align="L")
+        self.cell(0, 4, "BKPyV-VCM  ·  Clinical paper  ·  v2.1", align="L")
         self.cell(0, 4, "Mishra — October 2026", align="R", new_x="LMARGIN", new_y="NEXT")
         self.set_draw_color(190, 185, 172)
         self.line(22, 12, 188, 12)

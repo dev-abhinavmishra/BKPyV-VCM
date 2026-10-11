@@ -15,7 +15,7 @@ transplant-patient trajectories with its failures published, not hidden.
    latency + cell-to-cell persistence, real PK drug dosing.
 3. **Predictions → validation**: eight falsifiable signatures; all six
    published benchmarks pass; real-patient holdout beats baseline
-   (0.82 vs 1.36 log10) — 5/6 patients beaten, with named,
+   (0.82 vs 1.36 log10) — 4 clear wins / 1 marginal / 1 tie, with named,
    instructive failure modes.
 
 ## Numbers that stop judges (all verified, all in-repo)

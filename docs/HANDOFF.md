@@ -155,3 +155,18 @@ streamlit run src/vcm/ui/streamlit_app.py        # 12 pages
 - `scripts/render_paper_pdf.py` — renders the paper to `outputs/CLINICAL_PAPER.pdf` (7 pp, figures embedded). Needs fpdf2 (in requirements.txt).
 - `docs/PROJECT_EVERYTHING.md` — single-file nitty-gritty deep dive (architecture, 23-state table, all numbers).
 - `docs/deck/index.html` — self-contained animated deck (12 slides, keyboard nav, embedded patient_fits.png).
+- External-review pass applied (paper v2.1): narrowed novelty claims, conditional-prediction
+  framing, 4wins/1marg/1tie reporting, ImmPort/CTOT-19 correction, named tacrolimus
+  FKBP-12 + sirolimus intracellular-DNA omissions, conversion-vs-consensus caveat.
+
+## Queue from external review (Oct 11)
+1. Robustness: rerun each emergent prediction across parameter ranges + targeted
+   mechanism ablations (prove they persist, not just one config).
+2. Sensitivity: conversion optimum vs rejection-penalty weight, toxicity
+   constraints, and the two omitted direct drug effects (tac FKBP-12 host-DNA;
+   sir intracellular-genome reduction) — reconcile vs consensus guideline.
+3. Leakage-audited comparison vs simpler published models (Funk 6-comp,
+   Myers patient-fit) as baselines — not just the mean baseline.
+4. ImmPort/CTOT-19 access check for a second validation cohort.
+5. When Thompson series arrives: untouched external test + paired urine/plasma
+   rr prediction.

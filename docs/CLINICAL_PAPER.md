@@ -1,7 +1,7 @@
 # A Mechanistic Virtual Cell Predicts BK Polyomavirus Onset, Clearance, and Optimal Immunosuppression Strategy in Kidney Transplant Recipients
 
 **Abhinav Mishra** — Health Careers High School, San Antonio, Texas
-**Status:** Living draft, updated with each validation arc · **Version 2.0** · October 2026
+**Status:** Living draft, updated with each validation arc · **Version 2.1** · October 2026
 **Repository:** `dev-abhinavmishra/BKPyV-VCM` · branch `devin/novel-extensions` (pending merge)
 *Every quantitative claim is traceable to a script + test in the repository; digitized-data precision and phenomenological assumptions are labelled where they apply.*
 
@@ -9,11 +9,11 @@
 
 ## Structured Abstract
 
-**Background.** BK polyomavirus (BKPyV) reactivates in 30–60% of kidney-transplant recipients and causes polyomavirus-associated nephropathy in 1–10%, a leading cause of early graft loss. No antiviral has proven efficacy; management is qPCR surveillance followed by immunosuppression reduction, which trades viral control against rejection. Published mechanistic models reproduce population-level kinetics but emit no individual-level forecasts and no derived intervention policy.
+**Background.** BK polyomavirus (BKPyV) reactivates in 30–60% of kidney-transplant recipients and causes polyomavirus-associated nephropathy in 1–10%, a leading cause of early graft loss. No antiviral has proven efficacy; management is qPCR surveillance followed by immunosuppression reduction, which trades viral control against rejection. Published mechanistic models reproduce population-level kinetics and some fit individual patients; none combines host-cell permissiveness, compartment-specific NCCR selection, persistence mechanisms, and forecasting/intervention experiments in one model.
 
 **Methods.** We built a 23-compartment mechanistic ODE of BKPyV infection spanning the graft and urinary compartments, the intracellular S-phase–gated replication program, the innate and BKPyV-specific adaptive immune arms, real pharmacokinetic (ng/mL) dosing for tacrolimus and sirolimus, a latent reservoir, cell-to-cell transmission, and a two-pool NCCR quasi-species. We added four prediction layers — stochastic reactivation onset, early-window (β,δ) inference with Metropolis posteriors, continuous optimal control of the conversion decision, and CYP3A5 pharmacogenomic stratification — then validated against six published kinetic signatures and six real patient plasma trajectories digitized from Funk et al. 2008 under an honest holdout protocol (train on the first 60% of each series, predict the rest).
 
-**Results.** All six benchmark signatures pass. The model emits eight emergent predictions, including an onset-time *distribution* (median ≈6 wk at tacrolimus 8 ng/mL, within the clinical 4–16 wk cluster), an optimal-control derivation that immediate tac→sirolimus conversion dominates tapering, and a ~2.7× plasma-over-urine enrichment of rearranged NCCR genomes consistent with Gosert et al. On real patient data the model's held-out predictions beat a per-patient baseline on 5 of 6 patients (cohort MAE 0.82 vs 1.36 log₁₀ cp/mL; best per-patient R² = 0.98), with failure modes that map to specific, named mechanisms.
+**Results.** All six benchmark signatures pass. The model emits eight emergent predictions — *conditional* on its stated assumptions — including an onset-time *distribution* (median ≈6 wk at tacrolimus 8 ng/mL, within the clinical 4–16 wk cluster), an optimal-control derivation that immediate tac→sirolimus conversion dominates tapering under the model's objective, and a ~2.7× plasma-over-urine enrichment of rearranged NCCR genomes consistent with Gosert et al. On real patient data the model's held-out predictions beat or matched a per-patient baseline on all 6 patients — 4 clear wins, 1 marginal, 1 tie at displayed precision (cohort MAE 0.82 vs 1.36 log₁₀ cp/mL; best per-patient R² = 0.98) — with failure modes that map to specific, named mechanisms.
 
 **Conclusions.** A mechanistic virtual cell can move three unresolved BKPyV questions — when viremia begins, when it clears, and which intervention is optimal — from reactive to predictive, with quantified honest limits.
 
@@ -31,7 +31,7 @@ Three questions dominate clinical practice and lack quantitative answers:
 2. **Clearance** — once immunosuppression is reduced, when will the virus clear?
 3. **Policy** — which immunosuppression change (dose taper vs agent conversion) clears fastest at least rejection risk?
 
-Mechanistic viral-kinetic models are the natural tool for such questions. Funk et al. built the field's foundational BKPyV models — a six-compartment plasma model validated against prospectively monitored patients [5,6] — and Gosert et al. described the emergence of rearranged non-coding control region (rr-NCCR) variants during replication [7]. These models reproduce *population-level* kinetics but do not emit individual forecasts, do not represent the drug–immune interaction at the T-cell level, and do not derive the optimal intervention. Single-cell work has since established that host S-phase entry gates large T-antigen expression in primary renal proximal tubular cells [8], supplying a mechanistic trigger prior models lacked.
+Mechanistic viral-kinetic models are the natural tool for such questions. Funk et al. built the field's foundational BKPyV models — a six-compartment plasma model validated against prospectively monitored patients [5,6] — and Gosert et al. described the emergence of rearranged non-coding control region (rr-NCCR) variants during replication [7]. These models reproduce *population-level* kinetics; per-patient parameter fitting (Funk; Myers) and a prior feedback-control formulation of optimal immunosuppression (2018) each exist, but no published model couples host-cell permissiveness, compartment-specific NCCR selection, persistence, and forecasting/intervention machinery. The claim here is the *integration*, not any single component. Single-cell work has since established that host S-phase entry gates large T-antigen expression in primary renal proximal tubular cells [8], supplying a mechanistic trigger prior models lacked.
 
 We therefore built a 23-compartment mechanistic virtual cell designed from the start to emit *falsifiable, individual-level predictions*, and then tested it against real patient trajectories — reporting failures alongside wins.
 
@@ -65,7 +65,7 @@ Copies/mL readouts use an explicitly assumption-labelled anchor bridge (`viral_l
 
 ### 2.4 Real patient data
 
-No public longitudinal qPCR dataset is openly downloadable, so six patient plasma trajectories were digitized from Funk et al. 2008 Fig 3 [6] (CC BY-NC-ND; pixel-calibrated against the figure's own log₁₀ 4/7 reference lines; precision ≈ ±0.15 log₁₀, ±0.5 wk; provenance in `validation_data/funk2008/README.md`).
+No public longitudinal qPCR dataset is *freely* downloadable without application — Myers et al. obtained CTOT-19 via ImmPort — so six patient plasma trajectories were digitized from Funk et al. 2008 Fig 3 [6] (CC BY-NC-ND; pixel-calibrated against the figure's own log₁₀ 4/7 reference lines; precision ≈ ±0.15 log₁₀, ±0.5 wk; provenance in `validation_data/funk2008/README.md`).
 
 ## 3. Results
 
@@ -75,9 +75,11 @@ All six benchmark checks pass: clearance half-life 6.6 d (within Funk's 0.25–1
 
 ### 3.2 Eight emergent predictions
 
+*Conditional predictions — model outputs under stated assumptions; several are partly imposed by construction (e.g. the reactivation hazard rises with trough). Their value is quantitative magnitude and falsifiability, not independent discovery of mechanism.*
+
 1. **Onset is a distribution, not a date.** Median ≈6 wk at tacrolimus 8 ng/mL (p10–p90 ≈1–17 wk), inside the clinical 4–16 wk cluster; reactivation probability rises 57%→96% across troughs 3→8; higher troughs yield earlier *and tighter* onsets.
-2. **Individual clearance is forecastable from three early points.** Virtual-cohort MAE 0.17 wk, 0/24 clear/not-clear discordance; posterior CIs answer "clear by week X with 90% probability."
-3. **The optimal policy is derivable.** The continuous-control optimum sits at the feasibility boundary — convert *immediately* at the strongest tolerated mTOR signal; each week of delay costs ~2.4 objective-weeks. Conversion dominance is a derived consequence, not a grid-search artifact.
+2. **Individual clearance is forecastable from three early points — under the assumed generator.** Virtual-cohort MAE 0.17 wk, 0/24 clear/not-clear discordance; posterior CIs answer "clear by week X with 90% probability." *This is synthetic-cohort inference performance, not yet a patient accuracy claim; the CIs are conditional on the model, priors, and noise/observation bridge.*
+3. **The optimal policy is derivable — under the model's objective and constraints.** The continuous-control optimum sits at the feasibility boundary — convert *immediately* at the strongest tolerated mTOR signal; each week of delay costs ~2.4 objective-weeks. Conversion dominance is a derived consequence, not a grid-search artifact. *This is an optimum under the model's objective function, not an established treatment recommendation: international consensus currently finds insufficient evidence for routine mTOR conversion [2]; sensitivity to rejection-penalty weights, toxicity constraints, and omitted direct drug effects is queued validation work.*
 4. **Genotype orthogonalizes risk.** CYP3A5 expressors clear tacrolimus ~2× faster (CPIC [9]); genotype-blind dosing assigns non-expressors the viral-onset risk and expressors the rejection risk.
 5. **rr-NCCR segregates by compartment.** Emergent ~2.7× plasma-over-urine enrichment — the direction Gosert reported clinically.
 6. **Monitoring cadence is itself an intervention.** Acting at 10³ vs 10⁴ cp/mL changes both clearance timing and quasi-species emergence.
@@ -91,12 +93,14 @@ All six benchmark checks pass: clearance half-life 6.6 d (within Funk's 0.25–1
 | Patient | Full RMSE | Full R² | Holdout MAE | Baseline MAE | Verdict |
 |---------|-----------|---------|-------------|--------------|---------|
 | 00107   | 0.47      | 0.53    | **0.29**    | 0.62         | model wins |
-| 00885   | 1.07      | 0.17    | 1.49        | 1.48         | tie (refractory) |
+| 00885   | 1.07      | 0.17    | 1.49        | 1.48         | tie — slightly worse at displayed precision (refractory) |
 | 06119   | 1.68      | −0.40   | **0.43**    | 2.03         | holdout wins big |
 | 15207   | 0.06      | **0.98**| **0.42**    | 0.68         | model wins |
 | 19771   | 0.92      | 0.53    | **1.69**    | 2.74         | model wins |
-| 27447   | 0.59      | 0.52    | **0.61**    | 0.61         | model wins (marginal) |
-| **Cohort** | —      | —       | **0.82**    | **1.36**     | **model wins 5/6** |
+| 27447   | 0.59      | 0.52    | 0.61        | 0.61         | tie at displayed precision |
+| **Cohort** | —      | —       | **0.82**    | **1.36**     | **4 clear wins, 1 marginal, 1 tie** |
+
+**Evidence tiers.** Tests/validators establish software correctness under the tested cases; the synthetic-cohort forecast establishes inference performance under the assumed generator and noise model; the six digitized trajectories are *preliminary retrospective* performance (the holdout informed development); independent longitudinal series — e.g. the offered Thompson cohort — are the pending external test. All five fitted parameters and the per-patient baseline are estimated on the training portion only; held-out points were never refit.
 
 Documented failure modes (reported, not tuned away): Pat 06119's ~10⁷·⁷ plasma peak exceeds the model's current ~10⁶ dynamic ceiling, so its full-series R² is negative even though its holdout beats baseline 4.7×; Pat 00885's refractory fluctuation has no monotone equivalent — the model declines to overfit it. Two failure modes are *mechanism pointers*: the transient surges the fitted curves cannot reach (00107's bump, 06119's spike, 27447's rebound) are exactly what the latent-reservoir and stochastic-reactivation arms generate as discrete events — naming the next experiment (fit with release events enabled; obtain urine + PBMC series to constrain L).
 
@@ -106,15 +110,15 @@ GSE317012 single-cell reanalysis (26 biopsies; 34,987 QC-passing cells): descrip
 
 ## 4. Discussion
 
-**What is new.** Prior BKPyV models validated population kinetics; this one was engineered to emit individual-level falsifiable predictions and was then exposed to real patient trajectories with the failures published alongside the wins. The strongest result for a specialist audience is not the fit quality but the *shape* of the failure set: the model names exactly which phenomena it cannot see (peak ceiling, refractory fluctuation, reservoir-driven rebound), and each maps to a measurable biological quantity.
+**What is new.** Not any single component — per-patient fitting and optimal-control formulations exist in the prior literature — but the *integration*: host-cell permissiveness × compartment-specific NCCR selection × persistence × forecasting machinery in one model, then exposed to real patient trajectories with the failures published alongside the wins. A leakage caveat applies: the digitized holdout was used repeatedly during model development, so these are *preliminary retrospective* results, not independent evidence; an untouched independent series (e.g. the offered Thompson cohort) is the real test. The strongest result for a specialist audience is not the fit quality but the *shape* of the failure set: the model names exactly which phenomena it cannot see (peak ceiling, refractory fluctuation, reservoir-driven rebound), and each maps to a measurable biological quantity.
 
 **Clinical translation.** The digital-twin demo (three early qPCR values → clearance-week posterior) is a concrete path toward preemptive management; the pharmacogenomic map identifies which patients a single tacrolimus trough actually stratifies; the optimal-control result reframes "reduce immunosuppression" as a solvable timing-and-agent problem. The rr-plasma>urine prediction is directly testable on paired urine/plasma longitudinal series — the dataset our collaborating lab (S. Thompson, UAB) has offered.
 
-**Limitations** (full list in `docs/LIMITATIONS.md`): phenomenological calibration; digitized-data precision ±0.15 log₁₀; plasma dynamic ceiling ~10⁶; a six-patient single-figure validation set; VST in effector-fraction rather than product-dose units; the latent reservoir lacks a clinical readout. Every limitation has a named data source that would close it.
+**Limitations** (full list in `docs/LIMITATIONS.md`): phenomenological calibration; digitized-data precision ±0.15 log₁₀ and the holdout's repeated use during development; plasma dynamic ceiling ~10⁶; a six-patient single-figure validation set; VST in effector-fraction rather than product-dose units; the latent reservoir lacks a clinical readout; credible intervals are conditional on the model, priors, and the copies/mL observation bridge. Two named mechanistic omissions: tacrolimus is modeled only through immune suppression — its *direct* cellular effect on host DNA synthesis via FKBP-12 in primary tubular cells (Hirsch [11]) is not yet represented; and sirolimus is modeled on production/permissiveness, while Hirsch measured reduced *intracellular* viral genome loads after early exposure — the model represents neither direct pathway. `rr_capsid_virion_cost` = 0.4 was selected to satisfy the curtailment signature, so that signature is not untouched validation for the rr module. Every limitation has a named data source or experiment that would close it.
 
 ## 5. Conclusions
 
-A mechanistic virtual cell can move BKPyV management from reactive to predictive: onset distributions, individual clearance forecasts with credible intervals, and a derived — not searched — intervention policy. Six-of-six published signatures reproduce, real-patient holdout beats baseline on 5/6, and every failure mode names its own missing measurement: a model that knows what it knows.
+A mechanistic virtual cell can move BKPyV management from reactive to predictive: onset distributions, individual clearance forecasts with credible intervals, and a derived — not searched — intervention policy. Six-of-six published signatures reproduce, real-patient holdout beats or matches baseline on all 6 (4 clear wins), and every failure mode names its own missing measurement: a model that knows what it knows. The intervention policy is a derived optimum *under the model's stated objective and constraints* — international consensus found insufficient evidence for routine mTOR conversion, and reconciling that discrepancy (sensitivity to rejection penalties, toxicity constraints, and omitted direct drug effects) is queued work.
 
 ## References
 
@@ -131,6 +135,7 @@ A mechanistic virtual cell can move BKPyV management from reactive to predictive
 11. Hirsch HH, et al. Sirolimus early-phase inhibition of BKPyV in renal tubular cells. *Am J Transplant* 2016;16(3):821–832.
 12. GSE317012 single-cell kidney-biopsy cohort (JCI Insight 2026, doi:10.1172/jci.insight.198227).
 13. Thompson S. Personal communication, UAB, Aug–Oct 2026 (model conventions confirmed; longitudinal patient series offered).
+14. Optimal control of immunosuppressants in renal transplant recipients. *Clin Transplant* 2018 — prior feedback-control formulation of optimal immunosuppression (acknowledged prior art for prediction 3).
 
 ## Figures
 
@@ -142,4 +147,5 @@ A mechanistic virtual cell can move BKPyV management from reactive to predictive
 ### Version log
 - **v1.0** (Sep 2026) — first full draft: 22-dim model, emergent results 1–6, no real data.
 - **v2.0** (Oct 2026) — 23-dim (c2c + L); emergent results 7–8; real-data holdout (Funk digitized, post-audit corrected values); packaging arc.
+- **v2.1** (Oct 2026) — external-review response: narrowed novelty claims (prior per-patient fitting and prior optimal-control work acknowledged); conditional-prediction framing; holdout reporting corrected to 4 clear wins / 1 marginal / 1 tie; ImmPort/CTOT-19 data availability corrected; tacrolimus FKBP-12 direct effect and sirolimus intracellular-genome effect named as omitted mechanisms; conversion optimum reframed vs consensus-guideline discrepancy; evidence-tier note added.
 - *Next update planned:* Thompson longitudinal urine+plasma series fit (pipeline built; data pending).

@@ -25,10 +25,11 @@ when viremia starts (as a distribution, not a date), when a specific
 patient clears, and which immunosuppression change is optimal — and it has
 already been tested against real patient trajectories.
 
-**Why it's novel:** no published BKPyV kinetic model produces an onset-time
-distribution, an individual clearance forecast with credible intervals, or
-a *derived* optimal policy. All three exist here, plus eight emergent
-predictions that were not fitted.
+**Why it's novel:** not any single component — per-patient fitting (Funk,
+Myers) and a prior feedback-control optimal-IS formulation (2018) exist.
+The novelty is the *integration*: host-cell permissiveness × compartment-
+specific NCCR selection × persistence × forecasting machinery, plus eight
+emergent (conditional) predictions that were not fitted.
 
 **Working relationship:** Sunnie Thompson's lab (UAB Microbiology — the
 group behind the S-phase single-cell finding, Needham 2024) reviewed the
@@ -180,7 +181,7 @@ patient-calibrated truth.
 | `pharmacogenomic_stratification.py` | CYP3A5 → tac clearance (CPIC) | Expressor trough ~4.8 vs 8.0 → onset ~10 vs ~6.3 wk; genotype-blind dosing assigns non-expressors viral-onset risk, expressors rejection risk |
 | `tcell_therapy_simulation.py` | VST CTL bolus under maintained tac | Transient dips only at ~4× homeostatic ceiling; NEVER durable clearance — ceiling + calcineurin-blocked expansion + L/c2c reseeding (matches clinical VST transience) |
 | `identifiability_analysis.py` | which params patient data could constrain | Identifiability report — bounds what fits can mean |
-| `fit_patient_series.py` | 5-param fit (β, δ, pre_roll, act_week, tac_lo) to real CSVs; 60/40 honest holdout | Cohort holdout MAE **0.82 vs 1.36** log₁₀; wins 5/6; per-patient table in §8; figure → `outputs/figures/patient_fits.png` |
+| `fit_patient_series.py` | 5-param fit (β, δ, pre_roll, act_week, tac_lo) to real CSVs; 60/40 honest holdout | Cohort holdout MAE **0.82 vs 1.36** log₁₀; 4 wins / 1 marginal / 1 tie; per-patient table in §8; figure → `outputs/figures/patient_fits.png` |
 | `generate_figures.py` | 4-panel composite | `outputs/figures/composite_figure.png` |
 | `validate_bkpyv.py`, `validate_isef.py` | pipeline gates | exit 0 |
 | `download_gse317012.py`, `cluster_gse317012.py`, `analyze_gse317012.py` | scRNA pipeline | 26 biopsies; 34,987 QC cells; MWU p=0.16 (descriptive) |
@@ -209,7 +210,9 @@ exceptions; `test_streamlit_app.py` asserts all 12 + per-page content.
 
 Source: Funk et al. 2008, *Am J Transplant* 8(11):2368–2377,
 doi:10.1111/j.1600-6143.2008.02402.x, CC BY-NC-ND. No open qPCR dataset
-exists anywhere (PMC supplements, Zenodo, Dryad, GEO, edoc all checked);
+is *freely* downloadable without application — Myers et al. obtained
+CTOT-19 via ImmPort; direct-download sources (PMC supplements, Zenodo,
+Dryad, GEO, edoc) all checked);
 Fig 3's six patient panels were digitized programmatically —
 pixel-calibrated against the figure's own log₁₀ 4/7 dashed reference
 lines; plasma vs urine markers separated by blob core intensity (dark
@@ -220,7 +223,10 @@ fill = plasma). Precision ≈ ±0.15 log₁₀, ±0.5 wk. CSVs +
 **Fit design:** patient week-0 is mid-course, not infection onset → the
 model pre-rolls under high-IS (`pre_days`) so the state sits on its own
 quasi-steady manifold; the intervention is IS reduction (T_HI 9 ng/mL →
-fitted `tac_lo`) at fitted `act_week`.
+fitted `tac_lo`) at fitted `act_week`. Holdout protocol: all 5 params fit
+on the first 60% only; baseline = mean of the train portion only;
+held-out points never refit — but the series informed model development,
+so this is *preliminary retrospective* evidence, not independent.
 
 **Results (post-audit, true timescale):**
 
@@ -231,8 +237,8 @@ fitted `tac_lo`) at fitted `act_week`.
 | 06119 | 1.68 | −0.40 | 0.43 | 2.03 | wins big |
 | 15207 | 0.06 | **0.98** | 0.42 | 0.68 | wins |
 | 19771 | 0.92 | 0.53 | 1.69 | 2.74 | wins |
-| 27447 | 0.59 | 0.52 | 0.61 | 0.61 | wins (marginal) |
-| **Cohort** | | | **0.82** | **1.36** | **5/6** |
+| 27447 | 0.59 | 0.52 | 0.61 | 0.61 | tie (marginal) |
+| **Cohort** | | | **0.82** | **1.36** | **4 wins / 1 marginal / 1 tie** |
 
 Failure modes, named not hidden: 06119's ~10⁷·⁷ spike exceeds the ~10⁶
 plasma ceiling (structural limit, full-R² negative despite a 4.7× holdout
@@ -251,7 +257,7 @@ refit *improved* every headline number. Lesson in `~/memory`.
 1. T-antigen never drives dCC/dt (S-phase gate is host-driven only).
 2. "Production" for drug effects; "replication" only for genome copying.
 3. Copies/mL bridge always assumption-labelled; mapper is scalar-only.
-4. State indices append-only (23 = L; never renumber).
+4. State indices append-only (the 23rd state, index 22, is L; never renumber).
 5. `validate_bkpyv.py`/`validate_isef.py` must exit nonzero on failure.
 6. YAML floats written `1.0e-6`.
 7. ISEF **2027** everywhere.
