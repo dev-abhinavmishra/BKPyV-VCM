@@ -58,7 +58,9 @@
   .meta .dots{display:flex;gap:7px;pointer-events:auto}
   .meta .dots i{width:7px;height:7px;border-radius:50%;border:1px solid var(--ink3);
     cursor:pointer;transition:all .3s}
-  .meta .dots i.on{background:var(--teal);border-color:var(--teal);box-shadow:0 0 7px var(--teal-glow)}
+  .meta .dots i.on{background:var(--teal);border-color:var(--teal);box-shadow:0 0 7px var(--teal-glow);
+    animation:dotpulse 3.2s ease-in-out infinite}
+  @keyframes dotpulse{0%,100%{box-shadow:0 0 7px var(--teal-glow)}50%{box-shadow:0 0 14px var(--teal-glow),0 0 3px #fff3}}
 
   /* ── slides ────────────────────────────────────── */
   .slide{position:fixed;inset:44px 0 30px;display:flex;align-items:center;justify-content:center;
@@ -1669,6 +1671,9 @@ function transStep(dt){
     sctx.clearRect(0,0,innerWidth,innerHeight);
     for(const pr of T.pairs)drawPoly(pr.b,pr.color,pr.w,1-u,T.cam);
     if(u>=1){trans=null;sctx.clearRect(0,0,innerWidth,innerHeight);
+      const tail=T.pairs[0].b;
+      idleGlow={x:tail[tail.length-1][0],y:tail[tail.length-1][1],
+        color:T.pairs[0].color,t:0};
       warm(cur+1);
       if(pending!=null){const p=pending;pending=null;show(p)}}
     return}}
@@ -1691,11 +1696,18 @@ addEventListener('touchend',e=>{if(tx0===null)return;
 addEventListener('resize',()=>{stageFit();for(const k in TARGET)delete TARGET[k];
   const sc=SCENES[slides[cur]?.id];
   if(sc&&!trans){active&&active.stop&&active.stop();active=sc()}});
-let lastT=performance.now();
+let lastT=performance.now(),idleGlow=null;
 (function loop(now){
   const dt=Math.min(.1,(now-lastT)/1000);lastT=now;
-  if(trans)transStep(dt);
+  if(trans){idleGlow=null;transStep(dt)}
   else if(active&&active.tick)active.tick(dt);
+  if(idleGlow&&!RM){idleGlow.t+=dt;
+    const a=Math.max(0,1-idleGlow.t/4.2)*(.6+.4*Math.sin(idleGlow.t*5));
+    if(a>0){const[gx,gy]=proj([idleGlow.x,idleGlow.y],{cx:innerWidth/2,cy:innerHeight*.55,zoom:1,tilt:0});
+      sctx.save();sctx.fillStyle=idleGlow.color;sctx.shadowColor=idleGlow.color;
+      sctx.shadowBlur=16;sctx.globalAlpha=a;
+      sctx.beginPath();sctx.arc(gx,gy,3,0,7);sctx.fill();sctx.restore()}
+    else{idleGlow=null;sctx.clearRect(0,0,innerWidth,innerHeight)}}
   requestAnimationFrame(loop)})(lastT);
 const hashIdx=()=>{const h=(location.hash.match(/s(\d+)/)||[])[1];
   return h?Math.max(0,slides.findIndex(s=>s.id==='s'+h)):0};
