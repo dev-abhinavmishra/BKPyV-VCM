@@ -46,6 +46,13 @@ point-wise morph into the next slide's hero path. Scenes expose
 charts continue seamlessly. `buildTarget(id)` computes morph targets
 (fresh sims; s2/s7/s8 warmed via `warm()` on idle); hairlines stand in
 for text slides. Nav queues via `pending`; RM instant-swaps.
+Deep links `#sN` map slide-id→index (527d87a fixed an off-by-one) +
+hashchange listener.
+
+**Every slide animates (527d87a):** s5 rows carry live micro-signal
+canvases (sceneMachines: onset blips, CI breathing, optimize cursor,
+genotype split, VST pulse, holdout dots); s10 verdicts stamp in via
+`stampsnap` + roaming `.auditbar`; s9 gains CSS `.scanbeam` sweep.
 
 ## Earlier arc (2026-10-09, finish-vcm branch)
 
