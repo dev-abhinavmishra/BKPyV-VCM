@@ -16,6 +16,7 @@ import re
 from pathlib import Path
 
 from fpdf import FPDF
+from fpdf.fonts import FontFace
 
 REPO = Path(__file__).resolve().parent.parent
 MD = REPO / "docs" / "CLINICAL_PAPER.md"
@@ -123,28 +124,19 @@ class Paper(FPDF):
 
 
 def render_table(pdf: Paper, rows: list[list[str]]) -> None:
-    n = len(rows[0])
-    if n == 6:
-        widths = [22, 26, 24, 32, 30, 32]
-    elif n == 5:
-        widths = [30, 40, 34, 36, 26]
-    else:
-        widths = [166 / n] * n
-    pdf.set_font("serif", "B", 9)
-    pdf.set_fill_color(238, 234, 224)
-    pdf.set_draw_color(150, 145, 130)
-    for r, row in enumerate(rows):
-        if r == 0:
-            pdf.set_font("serif", "B", 9)
-        elif r == len(rows) - 1:
-            pdf.set_font("serif", "B", 9)
-        else:
-            pdf.set_font("serif", "", 9)
-        for c, cell in enumerate(row):
-            fill = r == 0 or r == len(rows) - 1 or (r % 2 == 0)
-            pdf.cell(widths[c], 6.5, re.sub(r"\*\*", "", cell), border=1,
-                     align="C", fill=fill)
-        pdf.ln()
+    widths = {6: (22, 26, 24, 32, 30, 32),
+              5: (30, 40, 34, 36, 26)}.get(len(rows[0]))
+    pdf.set_font("serif", "", 8.5)
+    with pdf.table(width=166, col_widths=widths, line_height=4.4,
+                   text_align="CENTER", first_row_as_headings=True,
+                   headings_style=FontFace(emphasis="BOLD",
+                                           fill_color=(238, 234, 224)),
+                   cell_fill_color=(248, 246, 239),
+                   cell_fill_mode="ROWS") as table:
+        for row in rows:
+            tr = table.row()
+            for cell in row:
+                tr.cell(re.sub(r"\*\*", "", cell))
     pdf.ln(2)
 
 
