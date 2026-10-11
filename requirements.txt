@@ -6,6 +6,7 @@ pyyaml>=6.0
 numpy>=1.26.0
 pandas>=2.0.0
 matplotlib>=3.7.0
+fpdf2>=2.8.0
 plotly>=5.14.0
 click>=8.1.0
 rich>=13.0.0
