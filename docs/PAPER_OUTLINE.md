@@ -1,6 +1,6 @@
 # Paper Outline — BKPyV Mechanistic Virtual Cell
 
-**The full draft lives in `docs/PAPER_DRAFT.md`** (competition draft,
+**The full draft lives in `docs/CLINICAL_PAPER.md`** (living clinical paper,
 all numbers verified against `devin/novel-extensions` runs). This file
 keeps the section map; edit the draft, not this.
 

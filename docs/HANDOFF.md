@@ -141,7 +141,7 @@ streamlit run src/vcm/ui/streamlit_app.py        # 12 pages
   refractory 00885. Audit note: loaders return RAW units; convert at
   the sim boundary only — self-consistent x7 bugs hide in metrics but
   show in axes.
-- Competition packaging LANDED: docs/PAPER_DRAFT.md (full paper),
+- Competition packaging LANDED: docs/CLINICAL_PAPER.md (living clinical paper v2.0),
   ISEF_ABSTRACT.md (218w), PRESENTATION_POINTS.md (judge Q&A),
   outputs/figures/{composite_figure,patient_fits}.png.
 - RESEARCH QUEUE for next session: agnoprotein latency compartment
