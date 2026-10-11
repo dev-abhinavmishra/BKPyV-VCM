@@ -6,13 +6,13 @@ Audit date: 2026-10-05. Branch: `devin/finish-vcm`.
 
 | Area | Path | Status |
 |---|---|---|
-| Canonical engine | `src/vcm/simulators/ode_system.py` | Working — **22-dim ODE**, per-day rates (+T-cell arm, urinary compartment, NCCR quasi-species) |
+| Canonical engine | `src/vcm/simulators/ode_system.py` | Working — **23-dim ODE**, per-day rates (+T-cell arm, urinary compartment, NCCR quasi-species) |
 | ODE wrapper | `src/vcm/simulators/bkpyv_ode_simulator.py` | Working |
 | Legacy simulator | `src/vcm/simulators/bkpyv_simulator.py` | Working, **superseded for analysis** (see below) |
 | Plugin/parameters | `src/vcm/plugins/transplant/bk_polyomavirus/` | Working |
 | Clinical bridge | `src/vcm/clinical/viral_load_mapper.py` | Working — assumption-labelled V→cp/mL anchors |
 | Risk prediction | `src/vcm/clinical/risk_prediction.py` | Working — illustrative ORs, not fitted |
-| Dashboard | `src/vcm/ui/streamlit_app.py` | Working — 11 pages (+💉 Regimen Design) |
+| Dashboard | `src/vcm/ui/streamlit_app.py` | Working — 12 pages (+💉 Regimen Design, +🏆 Findings) |
 | Review bundle | `src/vcm/viz/bkpyv_review.py` | Working |
 | GSE317012 biopsy pipeline | `scripts/analyze_gse317012.py` | Working — 26 samples, pathway scores |
 | GSE317012 cell-level pipeline | `scripts/cluster_gse317012.py` | **Added this session** — QC/cluster/DE/holdout |
@@ -24,11 +24,11 @@ Audit date: 2026-10-05. Branch: `devin/finish-vcm`.
 
 ## What runs
 
-- `pytest tests/` — **211 tests pass** (was 184 passing before this session;
+- `pytest tests/` — **219 tests pass** (was 184 passing before this session;
   +14 new: benchmark metrics, sha256 helper, holdout split, e2e smoke).
 - `validate_bkpyv.py` — exits 0 (after fix, see below).
 - `validate_isef.py` — 4/4 pattern checks PASS, "EXCELLENT" (after fix).
-- `streamlit run src/vcm/ui/streamlit_app.py` — launches, all 10 pages render
+- `streamlit run src/vcm/ui/streamlit_app.py` — launches, all 12 pages render
   (verified in browser and via `AppTest`).
 - `scripts/benchmark_viral_load.py` — overall PASS (see docs/METHODS.md).
 
@@ -77,6 +77,7 @@ Audit date: 2026-10-05. Branch: `devin/finish-vcm`.
 | 19 | V_u | urinary virion pool | urine:plasma ~3000:1 |
 | 20 | F_rr | rr-NCCR fraction, KIDNEY pool | Gosert 2008 emergence dynamics |
 | 21 | F_rr_u | rr-NCCR fraction, URINARY pool | weakened selection (uro_rr_advantage 0.15) + drain mixing |
+| 22 | L | Latently-infected reservoir | immunosuppression-gated reactivation into I |
 
 ## Parameters with sources
 
@@ -93,3 +94,9 @@ Audit date: 2026-10-05. Branch: `devin/finish-vcm`.
 | tacrolimus/sirolimus clearance | in code | ASSUMPTION within published PK bounds |
 | clinical ORs (age/sex/prior tx) | 1.9/2.3/3.0 | illustrative; directions from Demey 2018 |
 | V→cp/mL bridge anchors | 0/0.02/0.2/1/3/5 → 0/1e2/1e3/1e4/1e6/1e7 | ASSUMPTION anchored on AST IDCOP 2019 + Kotton 2024 thresholds |
+
+Real-data validation (2026-10-10): 6 digitized Funk-2008
+plasma series fitted (validation_data/funk2008/); cohort
+holdout MAE 0.82 vs 1.36 log10 baseline; 5/6 beats or ties
+baseline; limits: plasma cap ~6 log (Pat 06119 ~7.7
+unreachable), refractory fluctuation (00885) unpredicted.

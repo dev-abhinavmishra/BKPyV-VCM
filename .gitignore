@@ -83,3 +83,7 @@ htmlcov/
 # Documentation builds
 docs/_build/
 site/
+# Small provenance-tracked reference series committed for validation scripts
+!/validation_data/
+!/validation_data/**
+!/validation_data/**/*.csv

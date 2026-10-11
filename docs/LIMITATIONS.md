@@ -64,7 +64,7 @@ Ordered roughly by severity. Each item states the boundary plainly.
     (BLAS/threading); cluster identities and counts are deterministic but
     embedding coordinates may differ in the last decimal.
 
-## Multi-compartment extension (22-dim) caveats
+## Multi-compartment extension (23-dim) caveats
 
 - **Urothelial block is population-level** — no per-cell TAg/S-phase gates
   (the tissue-level Funk 2008 formulation); intracellular mechanism lives

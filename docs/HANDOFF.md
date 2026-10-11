@@ -1,9 +1,60 @@
 # HANDOFF — where this project stands and what's next
 
-Updated: 2026-10-09. Branch `devin/finish-vcm` (tracks origin; several
-commits ahead of main, PR pending).
+Updated: 2026-10-11. Branch `devin/novel-extensions` (PR #2 open —
+do NOT merge without Abhinav's explicit go).
 
-## What was built (this arc, 4 commits)
+## Latest arc — live-deck rehaul + paper v2.2 (2 commits)
+
+1. **`docs/deck/index.html` rewritten end-to-end** (`ce03883`): the deck
+   is now a dark lab-console instrument that *runs the model in-browser*.
+   A hand-ported JS `rhs(t,y,ctx,p)` mirrors `ode_system.py` term for
+   term (all 23 derivatives verified identical at t=0). **Stiffness
+   trap:** the fixed-step RK4 needs `dt = 0.02 d`; `dt ≥ 0.05` destabilizes
+   vs Python LSODA (V explodes, L→25k). Scene step-counts were rescaled
+   accordingly. Every slide computes: title = live tac-8 trajectory;
+   reservoir = latent cells flashed by the ODE's reactivation flux;
+   gap = 20 (β,δ)-jittered patients; schematic = live compartment
+   flux packets + streamed state values; code lens = the executing RHS
+   with live term magnitudes; lab = taper-vs-conversion arms with a
+   conversion-week slider; onset = 96-patient MC histogram per trough
+   chip; twin = 3 qPCR points → (β,δ) posterior → clearance CI; close =
+   ambient re-run. `patient_fits.png` embedded as data URI.
+   Reduced-motion + no-JS fallbacks render static end states.
+   Reveal animation is via `reveal()` (WAAPI, sets `visibility` inline
+   first — do not rely on `.rv` CSS state).
+2. **`CLINICAL_PAPER.md` → v2.2** (`447f254`): new §2.6 "Interactive
+   supplement — the model, running" documents the deck as an executable
+   figure set; version log bumped; PDF regenerated (7 pp, 251 KB,
+   `outputs/CLINICAL_PAPER.pdf`).
+
+**Test gate:** `pytest tests --ignore tests/test_streamlit_app.py` →
+210 passed, 8 skipped (data-gated). `test_streamlit_app.py` errors only
+because `streamlit` isn't in the venv — install it to run that file.
+
+**Serve the deck:** `cd docs/deck && python3 -m http.server 8931` →
+`localhost:8931/index.html#sN`.
+
+**Node harness for deck testing:** stub
+`matchMedia/document/addEventListener/location/history`, slice source at
+`const SCENES`, `eval(src + test)` — keep test code inside the same
+eval (class bindings don't leak).
+
+**Transitions (b332c16):** `#stage` fullscreen canvas drives slide
+changes — dive into the trace head (zoom+tilt+reflection), then
+point-wise morph into the next slide's hero path. Scenes expose
+`paths()` (viewport coords) and accept `pre` (model pts) so landed
+charts continue seamlessly. `buildTarget(id)` computes morph targets
+(fresh sims; s2/s7/s8 warmed via `warm()` on idle); hairlines stand in
+for text slides. Nav queues via `pending`; RM instant-swaps.
+Deep links `#sN` map slide-id→index (527d87a fixed an off-by-one) +
+hashchange listener.
+
+**Every slide animates (527d87a):** s5 rows carry live micro-signal
+canvases (sceneMachines: onset blips, CI breathing, optimize cursor,
+genotype split, VST pulse, holdout dots); s10 verdicts stamp in via
+`stampsnap` + roaming `.auditbar`; s9 gains CSS `.scanbeam` sweep.
+
+## Earlier arc (2026-10-09, finish-vcm branch)
 
 1. **21-dimensional ODE** (`11b3161`): added BKPyV-specific T-cell arm
    (T_naive priming + T_eff expansion, tac-attenuated via
@@ -55,7 +106,7 @@ Streamlit page; 208 tests green.
 .venv/bin/python scripts/benchmark_viral_load.py --quick   # OVERALL: PASS
 .venv/bin/python scripts/optimize_reduction_schedule.py    # regimen table
 .venv/bin/python scripts/identifiability_analysis.py       # sensitivity ranks
-streamlit run src/vcm/ui/streamlit_app.py        # 11 pages
+streamlit run src/vcm/ui/streamlit_app.py        # 12 pages
 ```
 
 ## What's next (highest value first)
@@ -79,7 +130,7 @@ streamlit run src/vcm/ui/streamlit_app.py        # 11 pages
 
 ## Arc 2 additions (commit c8cc551)
 
-- **22-dim**: F_rr_u (index 21) — urinary quasi-species pool, weakened
+- **22-23-dim**: F_rr_u (index 21) — urinary quasi-species pool, weakened
   selection (uro_rr_advantage=0.15, shedding- not S-phase-coupled) +
   kidney-drainage mixing. Gosert plasma>urine rr enrichment EMERGES ~3x.
 - **`scripts/screening_policy_analysis.py`**: trigger-level policy sim —
@@ -98,3 +149,75 @@ streamlit run src/vcm/ui/streamlit_app.py        # 11 pages
   viral_production. Do NOT raise to 1.0 — breaks curtail_50 fidelity.
 - taper-mode paradox worth presenting: taper at ANY trigger -> MORE
   emergence than no action (prolongs selection pressure).
+
+## Novel-extensions arc (devin/novel-extensions, UNMERGED per user)
+
+- reactivation_onset.py: hazard h = 0.005 + 0.0025*(tac-3); median onset
+  6.4wk @tac8. First onset-DISTRIBUTION model.
+- early_forecast.py: 3 noisy weekly points -> (beta,delta) grid -> MAE
+  0.17wk, 0 discordance. The bedside-facing claim.
+- Next candidates: optimal-control derivation, cell-to-cell spread.
+
+## Loop arc 2 (continued, UNMERGED)
+
+- pharmacogenomic_stratification.py: expressor trough 4.8 vs 8.0 ->
+  onset 10.0wk vs 6.4wk; risk orthogonality is the headline.
+
+## Loop arc 3 (continued, UNMERGED)
+
+- c2c transmission channel shipped (c2c_rate 0.03, V-independent
+  spread): benchmark still OVERALL PASS; reservoir-persistence
+  direction pinned by test. Effect is modest by design (10% of beta).
+- forecast_posterior (early_forecast.py): Metropolis UQ over
+  (beta,delta) -> clearance-week median/90%CI/P(clear). Verified:
+  posterior median 7.0-7.2 vs truth 6.7-7.1, honest intervals.
+- generate_figures.py: 4-panel publication composite ->
+  outputs/figures/composite_figure.png.
+- Suite: 219 tests / 8 skipped; benchmark PASS post-c2c and post-L.
+- L compartment (index 22): latent_fraction 0.02 of new infections
+  aborts into latency; reactivation_flux = lat_reactivation * L *
+  (1 - tac_immune_effect) feeds I — mechanistic reservoir behind
+  reactivation_onset.py and the mid-clearance resurge channel.
+- tcell_therapy_simulation.py: VST bolus arm — transient-only under
+  tac (ceiling + blocked expansion); honest negative-finding arc.
+- Streamlit "Findings" page (12th): posterior-forecast demo + onset
+  explorer live; AppTest-verified (median 7.0wk CI, 6.4wk onset).
+- Real-data validation LANDED: validation_data/funk2008/ (6 digitized
+  Funk-2008 plasma series, CC BY-NC-ND, provenance in that README) +
+  scripts/fit_patient_series.py. Cohort holdout MAE 0.82 vs 1.36 log10
+  baseline; 5/6 win-or-tie (only refractory 00885 ties). Refit after a
+  49x timeline audit-fix IMPROVED results; fitted params now real
+  clinical units (IS-reduction wk 11-89, pre-roll 20-400d). Documented
+  limits: model plasma cap ~6 log10 (Pat 06119 ~7.7 unreachable),
+  refractory 00885. Audit note: loaders return RAW units; convert at
+  the sim boundary only — self-consistent x7 bugs hide in metrics but
+  show in axes.
+- Competition packaging LANDED: docs/CLINICAL_PAPER.md (living clinical paper v2.0),
+  ISEF_ABSTRACT.md (218w), PRESENTATION_POINTS.md (judge Q&A),
+  outputs/figures/{composite_figure,patient_fits}.png.
+- RESEARCH QUEUE for next session: agnoprotein latency compartment
+  (Lat state feeding reactivation_onset mechanistically — replaces
+  the phenomenological hazard), Bayesian fit of the virtual cohort
+  to Thompson's series when it arrives, Streamlit poster-mode page
+  rendering the composite + UQ demo.
+
+## Latest additions (Oct 11)
+- `docs/CLINICAL_PAPER.md` — canonical living paper v2.0 (IMRaD); the PAPER_DRAFT/PAPER_OUTLINE stubs were deleted.
+- `scripts/render_paper_pdf.py` — renders the paper to `outputs/CLINICAL_PAPER.pdf` (7 pp, figures embedded). Needs fpdf2 (in requirements.txt).
+- `docs/PROJECT_EVERYTHING.md` — single-file nitty-gritty deep dive (architecture, 23-state table, all numbers).
+- `docs/deck/index.html` — self-contained animated deck (12 slides, keyboard nav, embedded patient_fits.png).
+- External-review pass applied (paper v2.1): narrowed novelty claims, conditional-prediction
+  framing, 4wins/1marg/1tie reporting, ImmPort/CTOT-19 correction, named tacrolimus
+  FKBP-12 + sirolimus intracellular-DNA omissions, conversion-vs-consensus caveat.
+
+## Queue from external review (Oct 11)
+1. Robustness: rerun each emergent prediction across parameter ranges + targeted
+   mechanism ablations (prove they persist, not just one config).
+2. Sensitivity: conversion optimum vs rejection-penalty weight, toxicity
+   constraints, and the two omitted direct drug effects (tac FKBP-12 host-DNA;
+   sir intracellular-genome reduction) — reconcile vs consensus guideline.
+3. Leakage-audited comparison vs simpler published models (Funk 6-comp,
+   Myers patient-fit) as baselines — not just the mean baseline.
+4. ImmPort/CTOT-19 access check for a second validation cohort.
+5. When Thompson series arrives: untouched external test + paired urine/plasma
+   rr prediction.

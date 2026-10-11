@@ -36,8 +36,9 @@ class TestBKPyVODESystem:
         """Test that state vector names are correctly defined."""
         ode_system = BKPyVODESystem()
         names = ode_system.get_state_vector_names()
-        assert len(names) == 22
+        assert len(names) == 23
         assert 'V' in names  # Viral load
+        assert 'L' in names  # Latent reservoir
         assert 'T' in names  # T antigen
         assert 'C' in names  # Healthy cells
         assert 'I' in names  # Infected cells
@@ -687,10 +688,11 @@ class TestNCCREmergence:
     """F_rr quasi-species dynamics: rearranged NCCR emerges under
     sustained replication (Gosert 2008)."""
 
-    def test_state_vector_is_21d_with_frr_last(self):
+    def test_state_vector_is_23d_with_frr_and_l(self):
         names = BKPyVODESystem().get_state_vector_names()
-        assert names[-2] == 'F_rr'
-        assert names[-1] == 'F_rr_u'
+        assert names[20] == 'F_rr'
+        assert names[21] == 'F_rr_u'
+        assert names[22] == 'L'
         assert len(BKPyVODESystem().get_initial_conditions()) == len(names)
 
     def test_frr_emerges_under_sustained_viremia(self):
@@ -822,3 +824,132 @@ class TestScreeningPolicies:
         pyvan = run_policy(10_000.0)
         assert screen["clearance_weeks"] < pyvan["clearance_weeks"]
         assert screen["rebound_index"] < pyvan["rebound_index"]
+
+
+class TestNovelExtensions:
+    """Reactivation-onset distribution + early-window forecast."""
+
+    def test_reactivation_hazard_monotone_and_onset_window(self):
+        """Higher tac trough -> higher hazard and earlier median onset;
+        at full suppression the median lands in the clinical 4-16 wk
+        cluster."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        from reactivation_onset import onset_days, hazard
+
+        assert hazard(12.0) > hazard(8.0) > hazard(3.0)
+        lo = onset_days(3.0, n=40, seed=3)
+        hi = onset_days(8.0, n=40, seed=3)
+        assert hi["pct_reactivated"] >= lo["pct_reactivated"]
+        assert hi["median_onset_weeks"] < lo["median_onset_weeks"]
+        assert 3.0 <= hi["median_onset_weeks"] <= 16.0
+
+    def test_forecast_accuracy_and_discordance(self):
+        """Three noisy weekly points predict clearance within ~2 weeks
+        and never invert the clear/not-clear call."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        from early_forecast import virtual_cohort
+
+        rows = virtual_cohort(n=6, seed=5)
+        errs = [abs(r["pred_clearance_weeks"] - r["true_clearance_weeks"])
+                for r in rows
+                if r["pred_clearance_weeks"] is not None
+                and r["true_clearance_weeks"] is not None]
+        assert np.mean(errs) < 2.0
+        assert sum(1 for r in rows
+                   if (r["pred_clearance_weeks"] is None)
+                   != (r["true_clearance_weeks"] is None)) == 0
+
+    def test_genotype_stratification_direction(self):
+        """CYP3A5 expressors clear tac faster -> lower effective trough
+        -> LESS immunosuppression -> later (not earlier) viral onset.
+        Viral risk and rejection risk are orthogonalized by genotype."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        from pharmacogenomic_stratification import genotype_outcome
+
+        non = genotype_outcome("CYP3A5 non-expressor (*3/*3)", n=40)
+        exp = genotype_outcome("CYP3A5 expressor (*1 carrier)", n=40)
+        assert exp["effective_trough"] < non["effective_trough"]
+        assert exp["median_onset_weeks"] > non["median_onset_weeks"]
+
+    def test_c2c_channel_persists_under_clearance(self):
+        """Cell-to-cell spread (V-independent) raises the infected-cell
+        reservoir under deep extracellular clearance vs free-virion-only —
+        modest by construction, direction is the signature."""
+        ode_free = BKPyVODESystem(params={'c2c_rate': 0.0, 'delta': 3.0, 'p': 1.0})
+        ode_c2c = BKPyVODESystem(params={'c2c_rate': 0.1, 'delta': 3.0, 'p': 1.0})
+        y0 = ode_free.get_infection_conditions(0.3)
+        i_free = solve_ivp(lambda t, y: ode_free.ode_system(t, y, None),
+                           (0, 120), y0, t_eval=[120.0], method='LSODA').y[4, -1]
+        i_c2c = solve_ivp(lambda t, y: ode_c2c.ode_system(t, y, None),
+                          (0, 120), y0, t_eval=[120.0], method='LSODA').y[4, -1]
+        assert i_c2c > i_free
+
+    def test_forecast_posterior_interval(self):
+        """Metropolis UQ: posterior median lands near truth and the 90%
+        interval has finite positive width."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent
+                               / "scripts"))
+        import early_forecast as ef
+        ode = BKPyVODESystem(params={"beta": 0.3, "delta": 0.4})
+        y0 = ode.get_infection_conditions(0.1)
+        tt, cp_true, _ = ef._simulate(ode, y0, ef._conversion(ef.ACT_DAY))
+        obs = cp_true[np.searchsorted(tt, np.array(ef.OBS_DAYS))]
+        true_wk = ef._clearance_week(tt, cp_true)
+        r = ef.forecast_posterior(ef.OBS_DAYS, obs,
+                                  n_mcmc=300, n_forward=15, seed=5)
+        assert r["clear_prob"] > 0.5
+        assert r["lo90"] < r["median_weeks"] <= r["hi90"]
+        assert abs(r["median_weeks"] - true_wk) < 3.0
+
+    def test_latent_reservoir_reactivates_under_tac(self):
+        """The L compartment: new infections seed it; immunosuppression
+        releases it into productive infection (the mechanistic reservoir
+        behind the reactivation-onset model)."""
+        dosing = {"tacrolimus": [{"start": 60.0, "stop": None,
+                                  "trough_ng_ml": 8.0}]}
+        ode = BKPyVODESystem()
+        y0 = ode.get_infection_conditions(0.3)
+        sol = solve_ivp(lambda t, y: ode.ode_system(t, y, dosing),
+                        (0, 120), y0, t_eval=[60.0, 120.0], method='LSODA')
+        assert sol.y[22, 0] > 0  # reservoir seeded by day 60
+        ode_nolat = BKPyVODESystem(params={'latent_fraction': 0.0})
+        sol2 = solve_ivp(lambda t, y: ode_nolat.ode_system(t, y, dosing),
+                         (0, 120), ode_nolat.get_infection_conditions(0.3),
+                         t_eval=[120.0], method='LSODA')
+        assert sol.y[4, -1] > sol2.y[4, -1] * 0.9  # reservoir feeds I
+
+    def test_vst_transient_only_under_tac(self):
+        """VST bolus: large infusion dips transiently but never durably
+        clears under maintained tac 8 (homeostatic ceiling + blocked
+        expansion); conversion control still clears."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent
+                               / "scripts"))
+        import tcell_therapy_simulation as vst
+        t8, cp8, _ = vst.simulate_with_vst(vst._tac(8.0), 28.0, 4.0)
+        post8 = cp8[t8 >= 28.0]
+        t0, cp0, _ = vst.simulate_with_vst(vst._tac(8.0), 28.0, 0.0)
+        post0 = cp0[t0 >= 28.0]
+        assert post8.min() < post0.min()              # transient dip exists
+        assert np.isinf(vst._clearance_week(t8, cp8))  # no durable clearance
+        conv = {"tacrolimus": [{"start": 0, "stop": 28, "trough_ng_ml": 8.0},
+                               {"start": 28, "stop": None, "trough_ng_ml": 3.0}],
+                "sirolimus": [{"start": 28, "stop": None, "trough_ng_ml": 4.0}]}
+        tc, cpc, _ = vst.simulate_with_vst(conv, 28.0, 0.0)
+        assert vst._clearance_week(tc, cpc) < 12.0     # control clears
+
+    def test_patient_series_harness(self):
+        """fit_patient_series: CSVs load, simulator produces finite
+        log10 cp/mL at obs days, and a mid-range theta is sane."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent
+                               / "scripts"))
+        import fit_patient_series as fps
+        csvs = sorted(fps.DATA_DIR.glob("pat_*.csv"))
+        assert len(csvs) == 6
+        wk, y = fps.load_series(csvs[0])
+        assert wk[0] >= 0 and np.all(np.diff(wk) >= 0)
+        assert y.min() >= 1.5 and y.max() <= 8.0
+        # plausible theta: beta .5, delta .4, pre 120d, act wk 20, tac_lo 3
+        pred = fps.simulate_patient([0.5, 0.4, 120.0, 20.0, 3.0],
+                                   wk * 7.0)
+        assert pred is not None and pred.shape == y.shape
+        assert np.all(np.isfinite(pred))
