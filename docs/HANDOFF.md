@@ -1,9 +1,45 @@
 # HANDOFF — where this project stands and what's next
 
-Updated: 2026-10-09. Branch `devin/finish-vcm` (tracks origin; several
-commits ahead of main, PR pending).
+Updated: 2026-10-11. Branch `devin/novel-extensions` (PR #2 open —
+do NOT merge without Abhinav's explicit go).
 
-## What was built (this arc, 4 commits)
+## Latest arc — live-deck rehaul + paper v2.2 (2 commits)
+
+1. **`docs/deck/index.html` rewritten end-to-end** (`ce03883`): the deck
+   is now a dark lab-console instrument that *runs the model in-browser*.
+   A hand-ported JS `rhs(t,y,ctx,p)` mirrors `ode_system.py` term for
+   term (all 23 derivatives verified identical at t=0). **Stiffness
+   trap:** the fixed-step RK4 needs `dt = 0.02 d`; `dt ≥ 0.05` destabilizes
+   vs Python LSODA (V explodes, L→25k). Scene step-counts were rescaled
+   accordingly. Every slide computes: title = live tac-8 trajectory;
+   reservoir = latent cells flashed by the ODE's reactivation flux;
+   gap = 20 (β,δ)-jittered patients; schematic = live compartment
+   flux packets + streamed state values; code lens = the executing RHS
+   with live term magnitudes; lab = taper-vs-conversion arms with a
+   conversion-week slider; onset = 96-patient MC histogram per trough
+   chip; twin = 3 qPCR points → (β,δ) posterior → clearance CI; close =
+   ambient re-run. `patient_fits.png` embedded as data URI.
+   Reduced-motion + no-JS fallbacks render static end states.
+   Reveal animation is via `reveal()` (WAAPI, sets `visibility` inline
+   first — do not rely on `.rv` CSS state).
+2. **`CLINICAL_PAPER.md` → v2.2** (`447f254`): new §2.6 "Interactive
+   supplement — the model, running" documents the deck as an executable
+   figure set; version log bumped; PDF regenerated (7 pp, 251 KB,
+   `outputs/CLINICAL_PAPER.pdf`).
+
+**Test gate:** `pytest tests --ignore tests/test_streamlit_app.py` →
+210 passed, 8 skipped (data-gated). `test_streamlit_app.py` errors only
+because `streamlit` isn't in the venv — install it to run that file.
+
+**Serve the deck:** `cd docs/deck && python3 -m http.server 8931` →
+`localhost:8931/index.html#sN`.
+
+**Node harness for deck testing:** stub
+`matchMedia/document/addEventListener/location/history`, slice source at
+`const SCENES`, `eval(src + test)` — keep test code inside the same
+eval (class bindings don't leak).
+
+## Earlier arc (2026-10-09, finish-vcm branch)
 
 1. **21-dimensional ODE** (`11b3161`): added BKPyV-specific T-cell arm
    (T_naive priming + T_eff expansion, tac-attenuated via
