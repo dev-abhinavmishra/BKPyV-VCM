@@ -151,7 +151,7 @@ streamlit run src/vcm/ui/streamlit_app.py        # 12 pages
   rendering the composite + UQ demo.
 
 ## Latest additions (Oct 11)
-- `docs/CLINICAL_PAPER.md` — canonical living paper v2.0 (IMRaD); PAPER_DRAFT.md is now a pointer to it.
+- `docs/CLINICAL_PAPER.md` — canonical living paper v2.0 (IMRaD); the PAPER_DRAFT/PAPER_OUTLINE stubs were deleted.
 - `scripts/render_paper_pdf.py` — renders the paper to `outputs/CLINICAL_PAPER.pdf` (7 pp, figures embedded). Needs fpdf2 (in requirements.txt).
 - `docs/PROJECT_EVERYTHING.md` — single-file nitty-gritty deep dive (architecture, 23-state table, all numbers).
 - `docs/deck/index.html` — self-contained animated deck (12 slides, keyboard nav, embedded patient_fits.png).

@@ -281,8 +281,8 @@ Run: `.venv/bin/python -m pytest tests/ -x -q`.
   `DECISIONS.md`, `ROADMAP.md`, `PROGRESS.md`, `BKPYV_MODEL_CARD.md`,
   `GSE317012_ANALYSIS.md`, `bkpyv_research_to_model_map.md`,
   `ISEF_PROJECT_OVERVIEW.md`, `ISEF_RESEARCH_PLAN.md`,
-  `PAPER_OUTLINE.md` (points at clinical paper), `PAPER_DRAFT.md`
-  (pointer only — superseded), `REFERENCES.md` (full citations)
+  `CLINICAL_PAPER.md` (canonical living paper + PDF renderer),
+  `REFERENCES.md` (full citations)
 
 ## 12. Git / PR state
 
