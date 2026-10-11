@@ -1,7 +1,7 @@
 # A Mechanistic Virtual Cell Predicts BK Polyomavirus Onset, Clearance, and Optimal Immunosuppression Strategy in Kidney Transplant Recipients
 
 **Abhinav Mishra** — Health Careers High School, San Antonio, Texas
-**Status:** Living draft, updated with each validation arc · **Version 2.1** · October 2026
+**Status:** Living draft, updated with each validation arc · **Version 2.2** · October 2026
 **Repository:** `dev-abhinavmishra/BKPyV-VCM` · branch `devin/novel-extensions` (pending merge)
 *Every quantitative claim is traceable to a script + test in the repository; digitized-data precision and phenomenological assumptions are labelled where they apply.*
 
@@ -77,6 +77,10 @@ No public longitudinal qPCR dataset is *freely* downloadable without application
 | Myers 2025 [10] | 6-state patient-scale ODE | yes — Duke/CTOT data | discusses earlier Kalman/feedback formulations | acknowledged closest prior art |
 | Optimal-control IS (2018) [14] | renal-transplant immunosuppression | no patient data in demo | yes — feedback control | proves a policy claim can't be "first-ever"; ours is derived *on the cell-mechanism layer* |
 | **VCM (this work)** | 23-compartment, 5 coupled layers | 6 digitized series, honest holdout | yes — continuous control + sensitivity queued | integration: permissiveness × NCCR selection × persistence × forecasting |
+
+### 2.6 Interactive supplement — the model, running
+
+`docs/deck/index.html` is a self-contained presentation that *executes the model itself* in the browser: a faithful JavaScript port of `src/vcm/simulators/ode_system.py` integrates the same 23-dimensional system in real time (fixed-step RK4 at Δt = 0.02 d; the system is stiff — coarser explicit steps destabilize against the reference LSODA trajectory). Every quantitative visual in the deck is computed on slide, not rendered offline: a live tacrolimus trajectory on the title frame; the latent reservoir driven by the ODE's own reactivation flux; twenty (β,δ)-jittered patients fanning out around the population mean; the executing right-hand side with live term magnitudes; side-by-side taper-versus-conversion arms on one virtual patient with an interactive conversion-week control; the Monte-Carlo onset distribution per selectable trough; and the early-window forecast — three qPCR points → (β,δ) posterior → clearance-week credible interval — recomputed per synthetic patient. Reduced-motion and no-script paths render every panel as static end states. The deck therefore doubles as an executable figure set: each claim in §3 can be watched forming.
 
 ## 3. Results
 
@@ -162,4 +166,5 @@ Figures are placed where they are cited: Figure 1 in §2.1 (model schematic), Fi
 - **v1.0** (Sep 2026) — first full draft: 22-dim model, emergent results 1–6, no real data.
 - **v2.0** (Oct 2026) — 23-dim (c2c + L); emergent results 7–8; real-data holdout (Funk digitized, post-audit corrected values); packaging arc.
 - **v2.1** (Oct 2026) — external-review response: narrowed novelty claims (prior per-patient fitting and prior optimal-control work acknowledged); conditional-prediction framing; holdout reporting corrected to 4 clear wins / 1 marginal / 1 tie; ImmPort/CTOT-19 data availability corrected; tacrolimus FKBP-12 direct effect and sirolimus intracellular-genome effect named as omitted mechanisms; conversion optimum reframed vs consensus-guideline discrepancy; evidence-tier note added.
+- **v2.2** (Oct 2026) — interactive supplement: presentation deck rebuilt around a live in-browser port of the ODE engine (§2.6); every result figure computed on-slide, including the interactive conversion lab and the posterior forecast.
 - *Next update planned:* Thompson longitudinal urine+plasma series fit (pipeline built; data pending).
