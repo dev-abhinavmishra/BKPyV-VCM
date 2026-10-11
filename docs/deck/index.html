@@ -62,8 +62,9 @@
 
   /* ── slides ────────────────────────────────────── */
   .slide{position:fixed;inset:44px 0 30px;display:flex;align-items:center;justify-content:center;
-    opacity:0;visibility:hidden;z-index:10}
+    opacity:0;visibility:hidden;z-index:10;transition:opacity .32s ease,visibility .32s}
   .slide.active{opacity:1;visibility:visible}
+  #stage{position:fixed;inset:0;z-index:40;pointer-events:none}
   .frame{width:min(1140px,92vw);max-height:calc(100vh - 96px);overflow:hidden;position:relative;padding-top:30px}
 
   .fig{position:absolute;top:-6px;left:2px;font-family:var(--mono);
@@ -171,6 +172,7 @@
     .meta,.progress,.hud .seg.live{display:none}
     .hud{position:relative}
     canvas{display:none}
+    #stage{display:none}
     .frame{max-height:none}
   }
   @media print{
@@ -354,7 +356,7 @@
     </div>
     <div class="rv" style="margin-top:14px">
       <span class="small" style="font-family:var(--mono);font-size:11px">
-        JS port of <em class="t">src/vcm/simulators/ode_system.py:327-672</em> — same equations, RK4 at Δt=0.25d.
+        JS port of <em class="t">src/vcm/simulators/ode_system.py:327-672</em> — same equations, RK4 at Δt=0.02d.
         Bright rows are terms currently dominating dV/dt.</span>
     </div>
   </div>
@@ -577,6 +579,8 @@
 </section>
 <!--§SLIDES_END-->
 
+<canvas id="stage"></canvas>
+
 <div class="meta">
   <span>BKPyV-VCM — mechanistic virtual cell · ISEF 2027</span>
   <span class="dots" id="dots" role="tablist" aria-label="slides"></span>
@@ -590,7 +594,7 @@
    VCM-23 deck engine — a faithful in-browser port of
    src/vcm/simulators/ode_system.py (23-dim ODE, per-day rates),
    the ViralLoadMapper piecewise log-linear bridge, and the
-   reactivation_onset.py hazard model. RK4 @ dt=0.25d.
+   reactivation_onset.py hazard model. RK4 @ dt=0.02d (stiff system).
    ═══════════════════════════════════════════════════════════════════ */
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const clamp=(x,a,b)=>x<a?a:x>b?b:x;
@@ -824,21 +828,41 @@ const ease=x=>1-Math.pow(1-x,3);
 const MT=document.getElementById('mt');
 function setMT(t){if(MT)MT.textContent='t = '+t.toFixed(1)+' d'}
 
+/* viewport-coord path helpers for the stage/morph engine */
+function cvr(cv){return cv.getBoundingClientRect()}
+function slVP(tr,sl,r){return tr.pts.map(p=>[r.left+sl.X(p[0]),r.top+sl.Y(p[1])])}
+function hairPath(r,color){const y=r.top+r.height*.5;
+  return[{pts:[[r.left+10,y],[r.right-10,y]],color:color||'rgba(93,106,94,.55)',w:1.4,model:null}]}
+function resample(pts,N){
+  if(pts.length<2)return pts.slice();
+  const seg=[0];let L=0;
+  for(let i=1;i<pts.length;i++){L+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]);seg.push(L)}
+  if(L===0)return pts.slice();
+  const out=[];let j=0;
+  for(let k=0;k<N;k++){const d=k/(N-1)*L;
+    while(j<seg.length-2&&seg[j+1]<d)j++;
+    const a=seg[j],b=seg[j+1],u=b>a?(d-a)/(b-a):0;
+    out.push([pts[j][0]+(pts[j+1][0]-pts[j][0])*u,pts[j][1]+(pts[j+1][1]-pts[j][1])*u])}
+  return out}
+
 /* s0 — title: a real trajectory draws itself (tac 8 ng/mL, inoculum 0.05) */
-function sceneTitle(){
-  const sl=new SemiLog(document.getElementById('cv0'),0,26,1.5,6,{l:60,r:24,t:34,b:26});
+function sceneTitle(pre){
+  const cv=document.getElementById('cv0');
+  const sl=new SemiLog(cv,0,26,1.5,6,{l:60,r:24,t:34,b:26});
   const sim=new Sim({dosing:{tacrolimus:dosing.tac(8)},inoc:.05});
   const tr=new Trace(sl,TEAL,2.4,14);let acc=0;const daysPerSec=26,HORIZ=182;
   function drawAll(){sl.frame({xstep:4});tr.draw(sl);
     const c=sl.c;c.fillStyle=INK3;c.font='10.5px '+MONO;c.textAlign='right';
     c.fillText('plasma DNAemia — tacrolimus 8 ng/mL, live RK4',sl.w-sl.pad.r,sl.pad.t-8)}
+  const api={paths(){return[{pts:slVP(tr,sl,cvr(cv)),color:TEAL,w:2.4}]},stop(){}};
+  const fill=model=>{model.forEach(([t,cp])=>tr.push(t,cp));drawAll();setMT(HORIZ)};
+  if(pre&&pre[0]&&pre[0].model){fill(pre[0].model);api.tick=()=>{};return api}
   if(RM){fullTrace({tacrolimus:dosing.tac(8)},.05,HORIZ,1).forEach(([t,v])=>tr.push(t/7,copies(v)));
-    drawAll();setMT(HORIZ);return{tick(){},stop(){}}}
-  return{
-    tick(dt){if(sim.t<HORIZ){acc+=dt*daysPerSec;
-        while(acc>=.5&&sim.t<HORIZ){sim.step(25);acc-=.5;tr.push(sim.t/7,copies(sim.y[0]))}
-        drawAll();setMT(sim.t)}},
-    stop(){}};
+    drawAll();setMT(HORIZ);api.tick=()=>{};return api}
+  api.tick=dt=>{if(sim.t<HORIZ){acc+=dt*daysPerSec;
+    while(acc>=.5&&sim.t<HORIZ){sim.step(25);acc-=.5;tr.push(sim.t/7,copies(sim.y[0]))}
+    drawAll();setMT(sim.t)}};
+  return api;
 }
 /* cheap full-trajectory helper for RM/static paths */
 function fullTrace(dosingCtx,inoc,tEnd,stepDays){
@@ -857,7 +881,7 @@ function sceneReservoir(){
       r0:2.2+rand()*2.4,ph:rand()*7,flash:0})}
   const rings=[];const sim=new Sim({dosing:{tacrolimus:dosing.tac(8)},inoc:.05});
   const T={};let accum=0;
-  if(RM){/* draw one static frame */drawStatic();return{tick(){},stop(){}}}
+  if(RM){/* draw one static frame */drawStatic();return{tick(){},paths(){return hairPath(cvr(cv),'rgba(154,143,240,.5)')},stop(){}}}
   function drawStatic(){c.clearRect(0,0,w,h);
     cells.forEach(cl=>{c.fillStyle='rgba(154,143,240,.5)';c.beginPath();c.arc(cl.x,cl.y,cl.r0,0,7);c.fill()})}
   return{
@@ -882,12 +906,14 @@ function sceneReservoir(){
         c.beginPath();c.arc(rg.x,rg.y,rg.r,0,7);c.stroke()}
       pv.textContent=sim.t<40?'dormant':sim.t<90?'reactivating':'productive infection';
       setMT(sim.t)},
+    paths(){return hairPath(cvr(cv),'rgba(154,143,240,.5)')},
     stop(){}};
 }
 
 /* s2 — gap: twenty jittered patients fan out around the mean */
-function sceneGap(){
-  const sl=new SemiLog(document.getElementById('cv2'),0,26,2,6,{l:50,r:14,t:24,b:24});
+function sceneGap(pre){
+  const cv2ref=document.getElementById('cv2');
+  const sl=new SemiLog(cv2ref,0,26,2,6,{l:50,r:14,t:24,b:24});
   const rand=mulberry32(97);const fans=[];const N=20;
   for(let i=0;i<N;i++){
     const p=Object.assign({},P,{beta:P.beta*(.65+rand()*.7),delta:P.delta*(.7+rand()*.6)});
@@ -900,15 +926,20 @@ function sceneGap(){
     meanTr.draw(sl);
     const c=sl.c;c.fillStyle=INK3;c.font='10.5px '+MONO;c.textAlign='left';
     c.fillText('n = '+idx+' virtual patients — same dosing, jittered (β, δ)',sl.pad.l+6,sl.pad.t-8)}
-  if(RM){fans.forEach(compute);idx=N;
+  const allPaths=()=>{const r=cvr(cv2ref);const out=fans.map(f=>({pts:slVP(f.tr,sl,r),color:'rgba(56,213,181,.4)',w:1.4}));
+    out.push({pts:slVP(meanTr,sl,r),color:INK,w:2.2});return out};
+  if(pre||RM){fans.forEach(compute);idx=N;
     fullTrace({tacrolimus:dosing.tac(8)},.05,DAYS,2).forEach(([t,v])=>meanTr.push(t/7,copies(v)));
-    frame();return{tick(){},stop(){}}}
+    meanDone=true;frame();
+    return{tick(){},paths:allPaths,stop(){}}}
   return{
     tick(dt){
       if(idx<N){compute(fans[idx]);idx++}
       else if(!meanDone){fullTrace({tacrolimus:dosing.tac(8)},.05,DAYS,2)
         .forEach(([t,v])=>meanTr.push(t/7,copies(v)));meanDone=true}
       frame();setMT(idx*7)},
+    paths(){const r=cvr(cv2ref);const out=fans.slice(0,Math.max(idx,1)).map(f=>({pts:slVP(f.tr,sl,r),color:'rgba(56,213,181,.4)',w:1.4}));
+      out.push({pts:slVP(meanTr,sl,r),color:INK,w:2.2});return out},
     stop(){}};
 }
 
@@ -980,15 +1011,15 @@ function sceneModel(){
     c.fillStyle=INK2;c.fillText('F_rr = '+(sim.y[20]||0).toFixed(3),.52*w,.92*h+10);
     pv.textContent='t = '+sim.t.toFixed(0)+' d';
     setMT(sim.t)}
-  if(RM){sim.runTo(120);tickDraw(0);return{tick(){},stop(){}}}
-  return{tick:tickDraw,stop(){}};
+  if(RM){sim.runTo(120);tickDraw(0);return{tick(){},paths(){return hairPath(cvr(cv),'rgba(154,143,240,.5)')},stop(){}}}
+  return{tick:tickDraw,paths(){return hairPath(cvr(cv),'rgba(154,143,240,.5)')},stop(){}};
 }
 function roundRect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);
   c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);
   c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
 
 /* s4 — code lens: the executing RHS with live values */
-function sceneCode(){
+function sceneCode(pre){
   const sim=new Sim({dosing:{tacrolimus:dosing.tac(8)},inoc:.05});
   const T={};
   const host=document.getElementById('code4');
@@ -1015,8 +1046,10 @@ function sceneCode(){
   const get=id=>document.getElementById(id);
   const vEls={V:get('v4_V'),cp:get('v4_cp'),I:get('v4_I'),Teff:get('v4_Teff'),
     Dtac:get('v4_Dtac'),tac:get('v4_tac'),sir:get('v4_sir'),dV:get('v4_dV')};
-  const sl=new SemiLog(document.getElementById('cv4'),0,26,1.5,6,{l:6,r:6,t:6,b:6});
+  const cv4ref=document.getElementById('cv4');
+  const sl=new SemiLog(cv4ref,0,26,1.5,6,{l:6,r:6,t:6,b:6});
   const tr=new Trace(sl,TEAL,1.6,0);let run=0;
+  if(pre&&pre[0]&&pre[0].model)pre[0].model.forEach(([t,cp])=>tr.push(t,cp));
   function step(){
     sim.step(12);rhs(sim.t,sim.y,sim.ctx,sim.p,_k1,T);
     LINES.forEach((ln,i)=>{
@@ -1030,13 +1063,14 @@ function sceneCode(){
     if(sim.t<183){tr.push(sim.t/7,copies(sim.y[0]))}
     sl.frame({xstep:26,thresh:false});tr.draw(sl);
     setMT(sim.t)}
-  if(RM){sim.runTo(120);step();return{tick(){},stop(){}}}
-  return{tick(){step()},stop(){}};
+  if(RM){sim.runTo(120);step();return{tick(){},paths(){return[{pts:slVP(tr,sl,cvr(cv4ref)),color:TEAL,w:1.6}]},stop(){}}}
+  return{tick(){step()},paths(){return[{pts:slVP(tr,sl,cvr(cv4ref)),color:TEAL,w:1.6}]},stop(){}};
 }
 
 /* s6 — live lab: taper arm vs tac→sir conversion arm, same patient */
-function sceneLab(){
-  const sl=new SemiLog(document.getElementById('cv6'),0,26,1.5,6,{l:58,r:16,t:30,b:30});
+function sceneLab(pre){
+  const cv6ref=document.getElementById('cv6');
+  const sl=new SemiLog(cv6ref,0,26,1.5,6,{l:58,r:16,t:30,b:30});
   const pv=document.getElementById('pv6'),rg=document.getElementById('rg6'),
         cw=document.getElementById('cv6w'),out=document.getElementById('r6');
   let arms=null,raf=null;
@@ -1088,7 +1122,11 @@ function sceneLab(){
   rg.addEventListener('change',reset);
   document.getElementById('re6').addEventListener('click',reset);
   reset();
+  if(pre)finish();
   return{
+    paths(){const r=cvr(cv6ref);return[
+      {pts:slVP(arms.A.tr,sl,r),color:RUST,w:2.4},
+      {pts:slVP(arms.B.tr,sl,r),color:TEAL,w:2.6}]},
     tick(dt){
       if(!arms||arms.done)return;
       const steps=Math.max(1,Math.round(dt*60*17));
@@ -1105,7 +1143,7 @@ function sceneLab(){
 
 /* s7 — Monte-Carlo onset: histogram builds patient by patient */
 function sceneOnset(){
-  const cv=document.getElementById('cv7');const[c,w,h]=fit(cv);
+  const cv=document.getElementById('cv7');const[c,w,h]=fit(cv);const cv7ref=cv;
   const pv=document.getElementById('pv7');
   const stM=document.getElementById('r7m'),stP=document.getElementById('r7p'),stO=document.getElementById('r7o');
   const NB=26,N=96;let tac=8,pat=0,bins,onsets,rand,done,t0;
@@ -1153,15 +1191,26 @@ function sceneOnset(){
     render(1);
     if(pat>=N){done=true;stats();pv.textContent='tac '+tac+' ng/mL — n='+N}
     setMT(pat*1.9)}
+  function histPath(){const r=cvr(cv7ref);const pad={l:36,r:14,t:26,b:30};
+    const bw=(r.width-pad.l-pad.r)/NB;
+    const maxB=Math.max(1,...bins.slice(0,NB));
+    const pts=[];
+    for(let b=0;b<NB;b++){const bh=(bins[b]/maxB)*(r.height-pad.t-pad.b-30);
+      const x0=r.left+pad.l+b*bw,x1=r.left+pad.l+(b+1)*bw,y=r.top+r.height-pad.b-bh;
+      if(!pts.length)pts.push([x0,r.top+r.height-pad.b]);
+      pts.push([x0,y],[x1,y])}
+    pts.push([r.left+pad.l+NB*bw,r.top+r.height-pad.b]);
+    return[{pts,color:TEAL,w:2.2}]}
   document.querySelectorAll('.chip.t7').forEach(ch=>ch.addEventListener('click',()=>{
     document.querySelectorAll('.chip.t7').forEach(x=>x.classList.toggle('on',x===ch));reset()}));
   document.getElementById('re7').addEventListener('click',reset);
   reset();
-  return{tick,stop(){}};}
+  return{tick,paths:histPath,stop(){}};}
 
 /* s8 — digital twin: 3 noisy points → posterior fan → clearance CI */
-function sceneTwin(){
-  const sl=new SemiLog(document.getElementById('cv8'),0,26,1.5,6,{l:58,r:16,t:30,b:44});
+function sceneTwin(pre){
+  const cv8ref=document.getElementById('cv8');
+  const sl=new SemiLog(cv8ref,0,26,1.5,6,{l:58,r:16,t:30,b:44});
   const pv=document.getElementById('pv8');
   const stM=document.getElementById('r8m'),stC=document.getElementById('r8c'),stP=document.getElementById('r8p');
   let stage,obs,samps,si,clearWks,truth,rand;
@@ -1192,6 +1241,8 @@ function sceneTwin(){
     let acc=0;const want=18;
     for(const g of sorted){acc+=g.p;samps.push({b:g.b,d:g.d,tr:null,clear:null});
       if(samps.length>=want)break}
+    if(pre){while(stage==='observe')stepAll(1e9);
+      while(stage==='infer'&&si<Math.min(samps.length,10))stepAll(1e9)}
     if(RM){while(stage!=='done')stepAll(1e9)}}
   function stepAll(budget){
     if(stage==='observe'){
@@ -1236,28 +1287,187 @@ function sceneTwin(){
     c.fillText('3 observed qPCR points',sl.w-sl.pad.r,sl.pad.t+12)}
   document.getElementById('re8').addEventListener('click',reset);
   reset();
-  return{tick(dt){stepAll(1);draw();setMT(si*7)},stop(){}};}
+  function paths(){const r=cvr(cv8ref);const out=[{pts:slVP(truth.tr,sl,r),color:'rgba(233,228,212,.6)',w:1.8}];
+    samps.forEach(s=>{if(s.tr)out.push({pts:slVP(s.tr,sl,r),color:'rgba(56,213,181,.35)',w:1.3})});
+    return out}
+  return{tick(dt){stepAll(1);draw();setMT(si*7)},paths,stop(){}};}
 
 /* s9 — count-up readouts (the number he never saw animate) */
 function sceneData(){
   const el=document.getElementById('n3');const t0=performance.now();const DUR=1300;
-  if(RM){el.textContent='0.82';return{tick(){},stop(){}}}
-  return{tick(){const p=Math.min(1,(performance.now()-t0)/DUR);
-      el.textContent=(0.82*ease(p)).toFixed(2)},stop(){}};}
+  const hero=document.querySelector('#s9 .imgwrap');
+  const api={paths(){return hairPath(hero.getBoundingClientRect(),'rgba(93,106,94,.5)')},stop(){}};
+  if(RM){el.textContent='0.82';api.tick=()=>{};return api}
+  api.tick=()=>{const p=Math.min(1,(performance.now()-t0)/DUR);
+    el.textContent=(0.82*ease(p)).toFixed(2)};
+  return api;}
 
 /* s11 — close: ambient trace re-runs slowly */
-function sceneClose(){
-  const sl=new SemiLog(document.getElementById('cv11'),0,26,1.5,6,{l:40,r:20,t:14,b:20});
+function sceneClose(pre){
+  const cv=document.getElementById('cv11');
+  const sl=new SemiLog(cv,0,26,1.5,6,{l:40,r:20,t:14,b:20});
   const tr=new Trace(sl,'rgba(56,213,181,.55)',2,10);
   let sim=new Sim({dosing:{tacrolimus:dosing.tac(8)},inoc:.05});
-  if(RM){fullTrace({tacrolimus:dosing.tac(8)},.05,182,1).forEach(([t,v])=>tr.push(t/7,copies(v)));
-    sl.frame({xstep:4});tr.draw(sl);return{tick(){},stop(){}}}
-  return{tick(){if(sim.t<182){sim.step(25);tr.push(sim.t/7,copies(sim.y[0]))}
-      else{sim=new Sim({dosing:{tacrolimus:dosing.tac(8)},inoc:.05});tr.pts=[]}
-      sl.frame({xstep:4});tr.draw(sl)},stop(){}};}
+  const api={paths(){return[{pts:slVP(tr,sl,cvr(cv)),color:'rgba(56,213,181,.6)',w:2}]},stop(){}};
+  if(pre&&pre[0]&&pre[0].model){pre[0].model.forEach(([t,cp])=>tr.push(t,cp));
+    sim.runTo(182);sl.frame({xstep:4});tr.draw(sl)}
+  else if(RM){fullTrace({tacrolimus:dosing.tac(8)},.05,182,1).forEach(([t,v])=>tr.push(t/7,copies(v)));
+    sl.frame({xstep:4});tr.draw(sl);api.tick=()=>{};return api}
+  api.tick=()=>{if(sim.t<182){sim.step(25);tr.push(sim.t/7,copies(sim.y[0]))}
+    else{sim=new Sim({dosing:{tacrolimus:dosing.tac(8)},inoc:.05});tr.pts=[]}
+    sl.frame({xstep:4});tr.draw(sl)};
+  return api;}
 
 const SCENES={s0:sceneTitle,s1:sceneReservoir,s2:sceneGap,s3:sceneModel,s4:sceneCode,
   s6:sceneLab,s7:sceneOnset,s8:sceneTwin,s9:sceneData,s11:sceneClose};
+
+/* ═══════════════ TRANSITION ENGINE — the line IS the deck ═══════════════
+   advance → the current trace keeps extending, the camera dives into its
+   head (pseudo-3D: zoom + rotateX-ish tilt + ground reflection), then the
+   polyline morphs point-by-point into the next slide's hero path while the
+   next slide's header lands mid-morph. */
+const stageCv=document.getElementById('stage'),sctx=stageCv.getContext('2d');
+function stageFit(){const dpr=Math.min(2,devicePixelRatio||1);
+  stageCv.width=innerWidth*dpr;stageCv.height=innerHeight*dpr;
+  sctx.setTransform(dpr,0,0,dpr,0,0)}
+stageFit();
+
+const lerp=(a,b,u)=>a+(b-a)*u;
+
+/* morph target per slide, computed fresh (in viewport coords) + cached */
+const TARGET={};
+function buildTarget(id){
+  switch(id){
+    case 's0':case 's11':{
+      const cv=document.getElementById(id==='s0'?'cv0':'cv11');const r=cvr(cv);
+      const sl=id==='s0'?new SemiLog(cv,0,26,1.5,6,{l:60,r:24,t:34,b:26})
+                        :new SemiLog(cv,0,26,1.5,6,{l:40,r:20,t:14,b:20});
+      const model=fullTrace({tacrolimus:dosing.tac(8)},.05,182,1).map(([t,v])=>[t/7,copies(v)]);
+      return[{pts:model.map(([t,cp])=>[r.left+sl.X(t),r.top+sl.Y(cp)]),model,
+        color:id==='s0'?TEAL:'rgba(56,213,181,.6)',w:id==='s0'?2.4:2}]}
+    case 's1':return hairPath(cvr(document.getElementById('cv1')),'rgba(154,143,240,.5)');
+    case 's3':return hairPath(cvr(document.getElementById('cv3')),'rgba(154,143,240,.5)');
+    case 's5':return hairPath(document.querySelector('#s5 h2').getBoundingClientRect(),'rgba(56,213,181,.4)');
+    case 's9':return hairPath(document.querySelector('#s9 .imgwrap').getBoundingClientRect(),'rgba(93,106,94,.5)');
+    case 's10':return hairPath(document.querySelector('#s10 .ledger').getBoundingClientRect(),'rgba(226,104,61,.4)');
+    case 's2':{
+      const cv=document.getElementById('cv2');const r=cvr(cv);
+      const sl=new SemiLog(cv,0,26,2,6,{l:50,r:14,t:24,b:24});
+      const rand=mulberry32(97);const out=[];
+      for(let i=0;i<12;i++){const p=Object.assign({},P,{beta:P.beta*(.65+rand()*.7),delta:P.delta*(.7+rand()*.6)});
+        const s=new Sim({dosing:{tacrolimus:dosing.tac(8)},inoc:.05,params:p});const m=[];
+        while(s.t<182){s.step(4);m.push([s.t/7,copies(s.y[0])])}
+        out.push({pts:m.map(([t,cp])=>[r.left+sl.X(t),r.top+sl.Y(cp)]),model:m,color:'rgba(56,213,181,.4)',w:1.4})}
+      const mm=fullTrace({tacrolimus:dosing.tac(8)},.05,182,2).map(([t,v])=>[t/7,copies(v)]);
+      out.push({pts:mm.map(([t,cp])=>[r.left+sl.X(t),r.top+sl.Y(cp)]),model:mm,color:INK,w:2.2});
+      return out}
+    case 's4':{
+      const cv=document.getElementById('cv4');const r=cvr(cv);
+      const sl=new SemiLog(cv,0,26,1.5,6,{l:6,r:6,t:6,b:6});
+      const model=fullTrace({tacrolimus:dosing.tac(8)},.05,182,1).map(([t,v])=>[t/7,copies(v)]);
+      return[{pts:model.map(([t,cp])=>[r.left+sl.X(t),r.top+sl.Y(cp)]),model,color:TEAL,w:1.6}]}
+    case 's6':{
+      const cv=document.getElementById('cv6');const r=cvr(cv);
+      const sl=new SemiLog(cv,0,26,1.5,6,{l:58,r:16,t:30,b:30});
+      const mA=[],mB=[];
+      const sA=new Sim({dosing:{tacrolimus:[{start:0,stop:42,trough_ng_ml:8},{start:42,stop:null,trough_ng_ml:4}]},inoc:.05});
+      while(sA.t<182){sA.step(3);mA.push([sA.t/7,copies(sA.y[0])])}
+      const sB=new Sim({dosing:{tacrolimus:[{start:0,stop:42,trough_ng_ml:8}],
+        sirolimus:[{start:42,stop:null,trough_ng_ml:6}]},inoc:.05});
+      while(sB.t<182){sB.step(3);mB.push([sB.t/7,copies(sB.y[0])])}
+      return[{pts:mA.map(([t,cp])=>[r.left+sl.X(t),r.top+sl.Y(cp)]),model:mA,color:RUST,w:2.4},
+             {pts:mB.map(([t,cp])=>[r.left+sl.X(t),r.top+sl.Y(cp)]),model:mB,color:TEAL,w:2.6}]}
+    case 's7':{
+      const cv=document.getElementById('cv7');const r=cvr(cv);
+      const NB=26,pad={l:36,r:14,t:26,b:30};const bw=(r.width-pad.l-pad.r)/NB;
+      const bins=new Array(NB+1).fill(0);const rand=mulberry32(1008);
+      for(let i=0;i<24;i++){const tR=expDraw(rand,HAZ(8));
+        if(tR>182){bins[NB]++;continue}
+        const s=new Sim({dosing:{tacrolimus:dosing.tac(8)},inoc:.05,t0:tR});
+        let hit=1/0;while(s.t<182){s.step(4);if(copies(s.y[0])>=1e3){hit=s.t/7;break}}
+        if(hit<26.5)bins[Math.min(NB-1,Math.max(0,hit|0))]++;else bins[NB]++}
+      const maxB=Math.max(1,...bins.slice(0,NB));const pts=[];
+      for(let b=0;b<NB;b++){const bh=(bins[b]/maxB)*(r.height-pad.t-pad.b-30);
+        const x0=r.left+pad.l+b*bw,x1=r.left+pad.l+(b+1)*bw,y=r.top+r.height-pad.b-bh;
+        if(!pts.length)pts.push([x0,r.top+r.height-pad.b]);
+        pts.push([x0,y],[x1,y])}
+      pts.push([r.left+pad.l+NB*bw,r.top+r.height-pad.b]);
+      return[{pts,color:TEAL,w:2.2}]}
+    case 's8':{
+      const cv=document.getElementById('cv8');const r=cvr(cv);
+      const sl=new SemiLog(cv,0,26,1.5,6,{l:58,r:16,t:30,b:44});
+      const rand=mulberry32(4);const out=[];
+      const pt=Object.assign({},P,{beta:P.beta*(.7+rand()*.6),delta:P.delta*(.7+rand()*.6)});
+      const sT=new Sim({dosing:{tacrolimus:dosing.tac(8)},inoc:.05,params:pt});const mT=[];
+      while(sT.t<63){sT.step(4);mT.push([sT.t/7,copies(sT.y[0])])}
+      out.push({pts:mT.map(([t,cp])=>[r.left+sl.X(t),r.top+sl.Y(cp)]),model:mT,color:'rgba(233,228,212,.6)',w:1.8});
+      for(let i=0;i<5;i++){const pp=Object.assign({},P,{beta:P.beta*(.75+rand()*.5),delta:P.delta*(.75+rand()*.5)});
+        const s=new Sim({dosing:{tacrolimus:[{start:0,stop:42,trough_ng_ml:8}],
+          sirolimus:[{start:42,stop:null,trough_ng_ml:6}]},inoc:.05,params:pp});
+        const m=[];while(s.t<182){s.step(6);m.push([s.t/7,copies(s.y[0])])}
+        out.push({pts:m.map(([t,cp])=>[r.left+sl.X(t),r.top+sl.Y(cp)]),model:m,color:'rgba(56,213,181,.35)',w:1.3})}
+      return out}
+  }
+  return[]}
+function targetFor(id){if(!TARGET[id])TARGET[id]=buildTarget(id);return TARGET[id]}
+/* pre-warm heavy targets during idle so transitions never stall */
+const WARM={s2:1,s7:1,s8:1};
+function warm(n){const id=slides[n]&&slides[n].id;
+  if(id&&WARM[id]&&!TARGET[id])setTimeout(()=>{try{targetFor(id)}catch(e){}},600)}
+const HEROEL={s5:'#s5 h2',s10:'#s10 .ledger'};
+function heroFallback(slide){const sel=HEROEL[slide.id];
+  if(sel)return hairPath(document.querySelector(sel).getBoundingClientRect());
+  return[{pts:[[innerWidth*.3,innerHeight*.6],[innerWidth*.7,innerHeight*.6]],color:'rgba(93,106,94,.55)',w:1.4}]}
+
+/* pairing: extra source paths converge onto the last target path;
+   extra target paths sprout from the source's head */
+const NP=90;
+function pairMorph(A,B){const n=Math.max(A.length,B.length);const pairs=[];
+  for(let i=0;i<n;i++){
+    const aNew=i>=A.length,bNew=i>=B.length;
+    const a=A[Math.min(i,A.length-1)],b=B[Math.min(i,B.length-1)];
+    let aPts,bPts;
+    if(aNew){const base=A[A.length-1],end=base.pts[base.pts.length-1];
+      aPts=Array.from({length:NP},()=>end.slice())}
+    else aPts=resample(a.pts,NP);
+    bPts=resample(b.pts,NP);
+    pairs.push({a:aPts,b:bPts,color:(bNew?a:b).color||a.color,w:Math.max(a.w||2,b.w||2)*.92,
+      sprout:aNew})}
+  return pairs}
+function bbox(paths){let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  paths.forEach(p=>p.pts.forEach(([x,y])=>{x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y)}));
+  return{cx:(x0+x1)/2,cy:(y0+y1)/2}}
+
+function proj(pt,cam){const dx=pt[0]-cam.cx,dy=(pt[1]-cam.cy)*(1-cam.tilt*.8);
+  return[cam.cx+dx*cam.zoom,cam.cy+dy*cam.zoom]}
+function drawPoly(pts,color,w,alpha,cam){
+  if(pts.length<2||alpha<=0)return;
+  sctx.save();sctx.globalAlpha=alpha;sctx.strokeStyle=color;sctx.lineWidth=w;
+  sctx.lineJoin='round';sctx.lineCap='round';sctx.shadowColor=color;sctx.shadowBlur=9;
+  sctx.beginPath();
+  let p=proj(pts[0],cam);sctx.moveTo(p[0],p[1]);
+  for(let i=1;i<pts.length;i++){p=proj(pts[i],cam);sctx.lineTo(p[0],p[1])}
+  sctx.stroke();sctx.restore()}
+function drawReflected(pts,cam,alpha){
+  if(pts.length<2||cam.tilt<.05)return;
+  sctx.save();sctx.globalAlpha=alpha*cam.tilt*.3;
+  sctx.strokeStyle='#38d5b5';sctx.lineWidth=1.4;
+  sctx.beginPath();
+  let p=proj(pts[0],cam);sctx.moveTo(p[0],2*cam.cy-p[1]);
+  for(let i=1;i<pts.length;i++){p=proj(pts[i],cam);sctx.lineTo(p[0],2*cam.cy-p[1])}
+  sctx.stroke();sctx.restore()}
+function drawComet(pts,color,cam){
+  if(pts.length<2)return;
+  const k=Math.min(16,pts.length);
+  sctx.save();sctx.strokeStyle=color;sctx.lineCap='round';
+  sctx.shadowColor=color;sctx.shadowBlur=14;
+  for(let i=1;i<k;i++){const a=pts[pts.length-k+i-1],b=pts[pts.length-k+i];
+    sctx.globalAlpha=.15+.75*i/k;sctx.lineWidth=1+i/k*3.6;
+    sctx.beginPath();const pa=proj(a,cam),pb=proj(b,cam);
+    sctx.moveTo(pa[0],pa[1]);sctx.lineTo(pb[0],pb[1]);sctx.stroke()}
+  const h=proj(pts[pts.length-1],cam);
+  sctx.globalAlpha=1;sctx.fillStyle='#e9e4d4';sctx.shadowBlur=18;
+  sctx.beginPath();sctx.arc(h[0],h[1],3.6,0,7);sctx.fill();sctx.restore()}
 
 /* ═══════════════ NAV + reveal + frame loop ═══════════════ */
 const slides=[...document.querySelectorAll('.slide')];
@@ -1266,7 +1476,9 @@ slides.forEach((s,k)=>{const d=document.createElement('i');d.tabIndex=0;
   d.setAttribute('role','tab');d.setAttribute('aria-label','slide '+(k+1));
   d.addEventListener('click',()=>show(k));dotsHost.appendChild(d)});
 const dots=[...dotsHost.children];
-let cur=-1,active=null;
+let cur=-1,active=null,trans=null,pending=null;
+const DIVE=.62,MORPH=1.0,SETTLE=.34;
+
 function reveal(slide){
   [...slide.querySelectorAll('.rv')].forEach((el,i)=>{
     el.style.visibility='visible';
@@ -1274,18 +1486,91 @@ function reveal(slide){
     el.animate([{opacity:0,transform:'translateY(16px)'},
                 {opacity:1,transform:'none'}],
       {duration:620,delay:110+i*85,easing:'cubic-bezier(.3,0,.2,1)',fill:'backwards'})})}
-function show(n){
-  n=clamp(n,0,slides.length-1);
-  if(n===cur)return;cur=n;
-  slides.forEach((s,k)=>s.classList.toggle('active',k===n));
+
+function chrome(n){
   dots.forEach((d,k)=>d.classList.toggle('on',k===n));
   document.getElementById('counter').textContent=String(n+1).padStart(2,'0')+' / '+slides.length;
   document.getElementById('prog').style.width=((n+1)/slides.length*100)+'%';
+  history.replaceState(null,'','#'+slides[n].id)}
+
+function land(n,pre){
+  cur=n;
+  slides.forEach((s,k)=>s.classList.toggle('active',k===n));
+  chrome(n);
   if(active&&active.stop)active.stop();
   const sc=SCENES[slides[n].id];
-  active=sc?sc():null;
-  reveal(slides[n]);
-  history.replaceState(null,'','#'+slides[n].id)}
+  active=sc?sc(pre):null;
+  reveal(slides[n])}
+
+function show(n){
+  n=clamp(n,0,slides.length-1);
+  if(n===cur)return;
+  if(trans){pending=n;return}
+  if(RM||cur<0){land(n,null);warm(n+1);return}
+  const from=active&&active.paths?active.paths():heroFallback(slides[cur]);
+  let to=targetFor(slides[n].id);
+  if(!to||!to.length)to=heroFallback(slides[n]);
+  trans={u:0,ph:'dive',from,to,n,
+    cam:{cx:innerWidth/2,cy:innerHeight*.55,zoom:1,tilt:0},camFrom:null,camTo:null,
+    landed:false};
+  const outSlide=slides[cur];
+  outSlide.style.opacity=0;
+  setTimeout(()=>{outSlide.classList.remove('active');outSlide.style.opacity=''},360);
+  stageFit()}
+
+function transStep(dt){
+  const T=trans;
+  if(T.ph==='dive'){
+    T.u+=dt/DIVE;const u=Math.min(1,T.u);
+    if(active&&active.tick)active.tick(dt*1.9);           /* line keeps extending */
+    const live=active&&active.paths?active.paths():T.from;
+    const head=live[0].pts[live[0].pts.length-1];
+    T.cam.cx=lerp(innerWidth/2,head[0],ease(u));
+    T.cam.cy=lerp(innerHeight*.55,head[1],ease(u));
+    T.cam.zoom=lerp(1,3.1,ease(u));
+    T.cam.tilt=lerp(0,.58,ease(u));
+    sctx.clearRect(0,0,innerWidth,innerHeight);
+    live.forEach(p=>{drawReflected(p.pts,T.cam,1);drawPoly(p.pts,p.color,p.w+.6,1,T.cam)});
+    drawComet(live[0].pts,live[0].color,T.cam);
+    if(u>=1){T.ph='morph';T.u=0;
+      T.fz=live.map(p=>({pts:p.pts.slice(),color:p.color,w:p.w}));
+      T.pairs=pairMorph(T.fz,T.to);
+      const bb=bbox(T.to);
+      T.camFrom={...T.cam};
+      T.camTo={cx:bb.cx,cy:bb.cy,zoom:1,tilt:0}}
+    return}
+  if(T.ph==='morph'){
+    T.u+=dt/MORPH;const u=Math.min(1,T.u),eu=ease(u);
+    T.cam.cx=lerp(T.camFrom.cx,T.camTo.cx,eu);
+    T.cam.cy=lerp(T.camFrom.cy,T.camTo.cy,eu);
+    T.cam.zoom=lerp(T.camFrom.zoom,T.camTo.zoom,eu);
+    T.cam.tilt=lerp(T.camFrom.tilt,T.camTo.tilt,eu);
+    sctx.clearRect(0,0,innerWidth,innerHeight);
+    for(const pr of T.pairs){
+      const out=[];
+      for(let j=0;j<NP;j++){
+        const uj=clamp((u-(j/NP)*.34)/.66,0,1),e=ease(uj);
+        out.push([lerp(pr.a[j][0],pr.b[j][0],e),lerp(pr.a[j][1],pr.b[j][1],e)])}
+      const al=pr.sprout?clamp(u*1.8,0,1):1;
+      drawReflected(out,T.cam,al);drawPoly(out,pr.color,pr.w,al,T.cam)}
+    const last=T.pairs[0].b;
+    drawComet(last.map((p,j)=>[lerp(T.pairs[0].a[j][0],p[0],ease(clamp((u-(j/NP)*.34)/.66,0,1))),
+                               lerp(T.pairs[0].a[j][1],p[1],ease(clamp((u-(j/NP)*.34)/.66,0,1)))]),
+              T.pairs[0].color,T.cam);
+    if(u>=.5&&!T.landed){T.landed=true;land(T.n,T.to)}
+    if(active&&active.tick)active.tick(dt);
+    if(u>=1)T.ph='settle',T.u=0;
+    return}
+  if(T.ph==='settle'){
+    T.u+=dt/SETTLE;const u=Math.min(1,T.u);
+    if(active&&active.tick)active.tick(dt);
+    sctx.clearRect(0,0,innerWidth,innerHeight);
+    for(const pr of T.pairs)drawPoly(pr.b,pr.color,pr.w,1-u,T.cam);
+    if(u>=1){trans=null;sctx.clearRect(0,0,innerWidth,innerHeight);
+      warm(cur+1);
+      if(pending!=null){const p=pending;pending=null;show(p)}}
+    return}}
+
 addEventListener('keydown',e=>{
   if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown')show(cur+1);
   else if(e.key==='ArrowLeft'||e.key==='PageUp')show(cur-1);
@@ -1301,12 +1586,14 @@ addEventListener('touchstart',e=>tx0=e.touches[0].clientX,{passive:true});
 addEventListener('touchend',e=>{if(tx0===null)return;
   const d=e.changedTouches[0].clientX-tx0;
   if(d<-46)show(cur+1);else if(d>46)show(cur-1);tx0=null},{passive:true});
-addEventListener('resize',()=>{const sc=SCENES[slides[cur]?.id];
-  if(sc){active&&active.stop&&active.stop();active=sc()}});
+addEventListener('resize',()=>{stageFit();for(const k in TARGET)delete TARGET[k];
+  const sc=SCENES[slides[cur]?.id];
+  if(sc&&!trans){active&&active.stop&&active.stop();active=sc()}});
 let lastT=performance.now();
 (function loop(now){
   const dt=Math.min(.1,(now-lastT)/1000);lastT=now;
-  if(active&&active.tick)active.tick(dt);
+  if(trans)transStep(dt);
+  else if(active&&active.tick)active.tick(dt);
   requestAnimationFrame(loop)})(lastT);
 const h0=(location.hash.match(/s(\d+)/)||[])[1];
 show(h0?clamp(+h0-1,0,slides.length-1):0);
